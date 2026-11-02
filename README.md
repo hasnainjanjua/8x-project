@@ -17,7 +17,7 @@ A high-craft, full-stack reconstruction of **Fathom AI** (`fathom.video`) built 
 3. **Meetings Library (`/meetings`)**:
    - Filter across *All Calls*, *My Calls*, *Team Calls*, and *External Customer Calls*, plus platform (`Zoom`, `Google Meet`, `Teams`), category, and keyword search. Displays visual multi-participant talk-time ratio bars.
 4. **Recording Studio & Synchronized Transcript (`/meetings/[id]`)**:
-   - **Real Playable Audio Assets**: Uses actual multi-speaker WAV audio files (`public/media/*.wav`) generated via `scripts/generate-media.mjs`—not fake static waveforms.
+   - **Real Multi-Speaker Spoken English Audio Assets**: Uses actual spoken English multi-speaker WAV recordings (`public/media/*.wav`, 16kHz 16-bit Mono PCM) synthesized with 3 distinct Windows OneCore voices (`Microsoft David`, `Microsoft Zira`, `Microsoft Mark`) via `scripts/generate-speech-audio.ps1` and `scripts/generate-media.mjs`—aligned to each speaker turn and timestamp in the meeting transcripts.
    - **Bidirectional Timestamp Sync**: Playing audio highlights the active speaker tile and current transcript block; clicking any transcript line, chapter pill, or AI summary timestamp badge (`▶ 01:15`) immediately seeks the HTML5 audio player.
    - **Transcript Controls**: Search within transcript, filter by individual speaker, inline-edit transcript utterances, and create shareable highlight clips from any segment.
 5. **Switchable AI Summary Templates (`/meetings/[id]`)**:
@@ -30,14 +30,15 @@ A high-craft, full-stack reconstruction of **Fathom AI** (`fathom.video`) built 
      - *Engineering & Architecture Sync*
    - Includes **Ask Fathom AI** (contextual Q&A citing exact transcript timestamps) and **Automated Follow-Up Email Drafts**.
 6. **Action Items Hub (`/action-items`)**:
-   - Extracted and manual tasks with owner attribution, due dates, priority tags, completion checkboxes, and direct timestamp jump links back to the exact moment in the call.
-7. **Highlights, Clips & Unauthenticated Public Sharing (`/highlights`, `/share/[token]`)**:
+   - Extracted and manual tasks with inline task editing (`title`, `owner`, `dueDate`, `priority`), completion checkboxes, and direct timestamp jump links back to the exact moment in the call.
+7. **Highlights, Clips & Cross-Browser Public Sharing (`/highlights`, `/share/[token]`)**:
    - Create custom highlight clips with category tags (*Customer Pain*, *Key Insight*, *Decision*, *Pricing Objection*, *Feature Request*, *Positive Feedback*).
-   - Every meeting and clip has an unauthenticated **Public Share View** (`/share/share-acme-q4-discovery`, `/share/clip-acme-84k-budget`) accessible to logged-out visitors.
+   - Every seeded meeting, seeded clip, and **newly created custom clip** generates a portable signed share token (`c1_<fnv1a_sig>_<base64url>` via `src/lib/share-token.ts`) so custom clip links work in any fresh browser, incognito window, or external device without requiring authentication or paid database credentials. Invalid or tampered tokens render an explicit unavailable state.
 8. **Global Deep Search (`⌘K` / `Ctrl+K` & `/search`)**:
    - Instant search across meeting titles, participants, AI summaries, action items, and verbatim transcript lines.
-9. **Settings, Integrations & Custom Templates (`/settings`)**:
-   - Configure auto-record rules, calendar/CRM integrations (Google Calendar, Outlook, HubSpot, Slack, Notion, Salesforce), custom AI prompt instructions, and reset demo seed data.
+9. **Settings, Integrations, Safe Simulation Cleanup & Custom Templates (`/settings`)**:
+   - Configure auto-record rules, calendar/CRM integrations (Google Calendar, Outlook, HubSpot, Slack, Notion, Salesforce), and custom AI prompt instructions.
+   - Provides **non-destructive Simulated Call Cleanup** (removes `mtg-sim-*` test sessions while preserving the 4 seeded meetings and all user edits) alongside a confirmation-guarded **Full Factory Reset**.
 
 ---
 
@@ -45,11 +46,11 @@ A high-craft, full-stack reconstruction of **Fathom AI** (`fathom.video`) built 
 
 | Capability | Implementation Status | Details |
 | :--- | :--- | :--- |
-| **Audio Playback & Scrubbing** | **Real** | Uses genuine playable PCM `.wav` audio files (`public/media/*.wav`) wired to HTML5 `<audio>` with real-time `timeupdate` synchronization, `-10s/+10s` skip, and `1x–2x` speed control. |
+| **Multi-Speaker Speech Audio & Scrubbing** | **Real** | Uses genuine spoken English `.wav` recordings (`public/media/*.wav`) with 3 distinct human TTS voices (`David`, `Zira`, `Mark`) matched to the transcript speakers and timestamps, wired to HTML5 `<audio>` with real-time `timeupdate` synchronization, `-10s/+10s` skip, and `1x–2x` speed control. |
 | **Transcript & Summary Timestamp Sync** | **Real** | Clicking any summary citation, action item timestamp, chapter marker, or transcript utterance seeks the media player to that exact second. |
 | **AI Summary Template Switching** | **Real (Deterministic + Custom Builder)** | All 6 specialized templates (General, MEDDPICC, CS QBR, 1-on-1, User Research, Sprint Sync) dynamically re-render structured notes, decisions, and follow-up emails. |
-| **Live Zoom/Meet Recording Bot** | **Simulated (Clearly Labeled)** | Per the assignment brief, instead of dialing a headless bot into live Zoom/Meet servers, the **"Simulate Live Call"** modal (`SimulatedLiveCaptureModal`) demonstrates Fathom's in-call floating bar, live transcript streaming, and 1-click live Highlight bookmarking, then saves a playable meeting to the library. |
-| **Persistence Architecture** | **Hybrid Server API + Client LocalStorage** | State mutations persist both to `PUT /api/workspace` (`.data/workspace-db.json` / `os.tmpdir()`) and client `localStorage` (`fathom_ai_workspace_v1`), ensuring evaluators on serverless deployments experience reliable persistence without cross-visitor collisions. |
+| **Live Zoom/Meet Recording Bot** | **Simulated (Clearly Labeled + Safely Removable)** | Per the assignment brief, instead of dialing a headless bot into live Zoom/Meet servers, the **"Simulate Live Call"** modal (`SimulatedLiveCaptureModal`) demonstrates Fathom's in-call floating bar, live transcript streaming, and 1-click live Highlight bookmarking, then saves a playable meeting that can be removed anytime via **"Clean Up Simulated Calls"**. |
+| **Persistence & Public Clip Sharing** | **Hybrid Server API + LocalStorage + Signed Portable Share Tokens** | Workspace mutations persist to `PUT /api/workspace` and client `localStorage` (`fathom_ai_workspace_v1`). Custom highlight clips also embed a signed portable payload (`c1_<sig>_<base64url>`) in their `/share/[token]` URL so newly created clip links resolve and play in any external browser or device across Vercel serverless cold starts. |
 
 ---
 

@@ -20,6 +20,7 @@ import {
   X,
   ExternalLink,
   ShieldCheck,
+  Trash2,
 } from "lucide-react";
 import { useWorkspace } from "@/context/WorkspaceContext";
 import { cn } from "@/lib/utils";
@@ -44,9 +45,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setLiveRecorderModalOpen,
     setOnboardingModalOpen,
     toastMessage,
+    cleanupSimulatedMeetings,
     resetDemoWorkspace,
   } = useWorkspace();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [confirmResetSeed, setConfirmResetSeed] = useState(false);
+
+  const simulatedCount = state.meetings.filter(
+    (m) => m.isSimulatedCapture || m.id.startsWith("mtg-sim-")
+  ).length;
 
   // Public share pages and standalone auth page render with their own clean chrome or full-bleed layout
   const isShareRoute = pathname?.startsWith("/share/");
@@ -239,19 +246,51 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <LogIn className="h-4 w-4" />
             </Link>
           </div>
-          <div className="mt-2 flex items-center justify-between px-1">
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-1.5 px-1">
             <span className="flex items-center gap-1.5 text-[10px] text-emerald-400">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
               Instant Demo Active
             </span>
-            <button
-              onClick={resetDemoWorkspace}
-              className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-white"
-              title="Reset seeded meetings and tasks to initial state"
-            >
-              <RotateCcw className="h-2.5 w-2.5" />
-              <span>Reset Seed</span>
-            </button>
+            <div className="flex items-center gap-2">
+              {simulatedCount > 0 && (
+                <button
+                  onClick={cleanupSimulatedMeetings}
+                  className="flex items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300 border border-amber-500/30 hover:bg-amber-500/25"
+                  title="Safely remove simulated test calls while preserving the 4 seeded calls and your edits"
+                >
+                  <Trash2 className="h-2.5 w-2.5" />
+                  <span>Clean Sim ({simulatedCount})</span>
+                </button>
+              )}
+              {!confirmResetSeed ? (
+                <button
+                  onClick={() => setConfirmResetSeed(true)}
+                  className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-rose-300"
+                  title="Destructive: Reset entire workspace and all edits to initial seed"
+                >
+                  <RotateCcw className="h-2.5 w-2.5" />
+                  <span>Full Reset</span>
+                </button>
+              ) : (
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => {
+                      resetDemoWorkspace();
+                      setConfirmResetSeed(false);
+                    }}
+                    className="rounded bg-rose-600 px-1.5 py-0.5 text-[9px] font-bold text-white hover:bg-rose-500"
+                  >
+                    Confirm
+                  </button>
+                  <button
+                    onClick={() => setConfirmResetSeed(false)}
+                    className="rounded bg-[#1E2330] px-1.5 py-0.5 text-[9px] text-gray-300 hover:text-white"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </aside>
@@ -314,7 +353,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         {/* Mobile Drawer */}
         {mobileNavOpen && (
-          <div className="border-b border-[#1E2330] bg-[#0D1017] p-4 md:hidden">
+          <div className="border-b border-[#1E2330] bg-[#0D1017] p-4 md:hidden space-y-3">
             <nav className="grid grid-cols-2 gap-2">
               {NAV_ITEMS.map((item) => {
                 const Icon = item.icon;
@@ -331,6 +370,30 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 );
               })}
             </nav>
+            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-[#1E2330]">
+              <button
+                onClick={() => {
+                  setMobileNavOpen(false);
+                  setLiveRecorderModalOpen(true);
+                }}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white"
+              >
+                <Radio className="h-3.5 w-3.5" />
+                <span>Simulate Live Call</span>
+              </button>
+              {simulatedCount > 0 && (
+                <button
+                  onClick={() => {
+                    cleanupSimulatedMeetings();
+                    setMobileNavOpen(false);
+                  }}
+                  className="flex items-center justify-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-300"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span>Clean Sim ({simulatedCount})</span>
+                </button>
+              )}
+            </div>
           </div>
         )}
 

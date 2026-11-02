@@ -14,6 +14,7 @@ import {
   Play,
   ExternalLink,
   Sliders,
+  Trash2,
 } from "lucide-react";
 import { useWorkspace } from "@/context/WorkspaceContext";
 import { formatDurationHuman, formatRelativeDate, formatTimestamp } from "@/lib/utils";
@@ -25,12 +26,18 @@ export default function DashboardPage() {
     setOnboardingModalOpen,
     toggleUpcomingAutoRecord,
     toggleActionItem,
+    deleteSimulatedMeeting,
+    cleanupSimulatedMeetings,
   } = useWorkspace();
 
   const totalMeetings = state.meetings.length;
+  const simulatedMeetingsCount = state.meetings.filter(
+    (m) => m.isSimulatedCapture || m.id.startsWith("mtg-sim-")
+  ).length;
   const allActionItems = state.meetings.flatMap((m) => m.actionItems);
   const completedTasks = allActionItems.filter((a) => a.completed).length;
   const allHighlights = state.meetings.flatMap((m) => m.highlights);
+  const crmHoursSaved = ((totalMeetings * 22) / 60).toFixed(1);
 
   return (
     <div className="mx-auto max-w-7xl p-5 md:p-7 space-y-7">
@@ -56,6 +63,16 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
+          {simulatedMeetingsCount > 0 && (
+            <button
+              onClick={cleanupSimulatedMeetings}
+              className="flex items-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3.5 py-2.5 text-xs font-semibold text-amber-300 transition hover:bg-amber-500/20"
+              title="Safely remove simulated test meetings without resetting seeded calls"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              <span>Clean Up Simulated Calls ({simulatedMeetingsCount})</span>
+            </button>
+          )}
           <button
             onClick={() => setLiveRecorderModalOpen(true)}
             className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white shadow-lg shadow-indigo-600/25 transition hover:bg-indigo-500"
@@ -91,9 +108,9 @@ export default function DashboardPage() {
             <span className="text-xs font-medium text-gray-400">CRM & Post-Call Time Saved</span>
             <Clock className="h-4 w-4 text-[#00D4B2]" />
           </div>
-          <p className="mt-2 font-mono text-2xl font-bold text-white">6.4 hrs</p>
+          <p className="mt-2 font-mono text-2xl font-bold text-white">{crmHoursSaved} hrs</p>
           <p className="mt-1 text-[11px] text-gray-400">
-            Avg 22 mins saved per call via HubSpot sync
+            22 mins saved per call ({totalMeetings} calls synced)
           </p>
         </div>
 
@@ -183,6 +200,16 @@ export default function DashboardPage() {
                     </div>
 
                     <div className="flex shrink-0 items-center gap-2">
+                      {(mtg.isSimulatedCapture || mtg.id.startsWith("mtg-sim-")) && (
+                        <button
+                          onClick={() => deleteSimulatedMeeting(mtg.id)}
+                          className="flex items-center gap-1 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-medium text-amber-300 hover:bg-amber-500/20"
+                          title="Remove this simulated test call"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                          <span>Remove Sim</span>
+                        </button>
+                      )}
                       <Link
                         href={`/share/${mtg.shareToken}`}
                         className="flex items-center gap-1 rounded-lg border border-[#262D40] bg-[#161B29] px-2.5 py-1.5 text-[11px] font-medium text-gray-300 hover:border-[#00D4B2] hover:text-[#00D4B2]"

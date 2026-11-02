@@ -15,6 +15,7 @@ import {
 import { useWorkspace } from "@/context/WorkspaceContext";
 import { HighlightTag, Meeting, SummaryTemplateId } from "@/types/fathom";
 import { SUMMARY_TEMPLATES_META } from "@/data/seed-meetings";
+import { encodePortableClipToken } from "@/lib/share-token";
 import { formatTimestamp } from "@/lib/utils";
 
 const LIVE_STREAM_SCRIPT = [
@@ -247,21 +248,34 @@ export function SimulatedLiveCaptureModal() {
       ],
       highlights:
         liveHighlights.length > 0
-          ? liveHighlights.map((lh, idx) => ({
-              id: `${newId}-clip-${idx}`,
-              meetingId: newId,
-              meetingTitle,
-              title: `Live Highlight: ${lh.tag}`,
-              tag: lh.tag,
-              startTime: Math.max(0, lh.timestamp - 5),
-              endTime: lh.timestamp + 20,
-              createdBy: "Hasnain Janjua",
-              createdAt: new Date().toISOString(),
-              shareToken: `clip-sim-${Date.now()}-${idx}`,
-              viewCount: 1,
-              speakerName: "Jordan Taylor",
-              transcriptExcerpt: lh.note,
-            }))
+          ? liveHighlights.map((lh, idx) => {
+              const startSec = Math.max(0, lh.timestamp - 5);
+              const endSec = lh.timestamp + 20;
+              return {
+                id: `${newId}-clip-${idx}`,
+                meetingId: newId,
+                meetingTitle,
+                title: `Live Highlight: ${lh.tag}`,
+                tag: lh.tag,
+                startTime: startSec,
+                endTime: endSec,
+                createdBy: "Hasnain Janjua",
+                createdAt: new Date().toISOString(),
+                shareToken: encodePortableClipToken({
+                  meetingId: "mtg-eng-architecture",
+                  title: `Live Highlight: ${lh.tag}`,
+                  tag: lh.tag,
+                  startTime: startSec,
+                  endTime: endSec,
+                  speakerName: "Jordan Taylor",
+                  transcriptExcerpt: lh.note,
+                  createdBy: "Hasnain Janjua",
+                }),
+                viewCount: 1,
+                speakerName: "Jordan Taylor",
+                transcriptExcerpt: lh.note,
+              };
+            })
           : [
               {
                 id: `${newId}-clip-default`,
@@ -273,7 +287,17 @@ export function SimulatedLiveCaptureModal() {
                 endTime: 90,
                 createdBy: "Hasnain Janjua",
                 createdAt: new Date().toISOString(),
-                shareToken: `clip-sim-${Date.now()}`,
+                shareToken: encodePortableClipToken({
+                  meetingId: "mtg-eng-architecture",
+                  title: "30-Seat Engineering Trial Commitment",
+                  tag: "Decision",
+                  startTime: 50,
+                  endTime: 90,
+                  speakerName: "Jordan Taylor",
+                  transcriptExcerpt:
+                    "Let's move forward with a 30-seat engineering trial starting Monday and sync action items to Linear.",
+                  createdBy: "Hasnain Janjua",
+                }),
                 viewCount: 1,
                 speakerName: "Jordan Taylor",
                 transcriptExcerpt:

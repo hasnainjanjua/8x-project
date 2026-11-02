@@ -9,6 +9,7 @@ import React, {
   useState,
 } from "react";
 import { INITIAL_WORKSPACE_STATE } from "@/data/seed-meetings";
+import { encodePortableClipToken } from "@/lib/share-token";
 import {
   ActionItem,
   HighlightClip,
@@ -60,9 +61,20 @@ interface WorkspaceContextValue {
       timestampSeconds?: number;
     }
   ) => void;
+  updateActionItem: (
+    actionItemId: string,
+    payload: {
+      title?: string;
+      assigneeName?: string;
+      dueDate?: string;
+      priority?: "high" | "medium" | "low";
+    }
+  ) => void;
   deleteActionItem: (actionItemId: string) => void;
-  // Simulated Live Recording / Bot Capture
+  // Simulated Live Recording / Bot Capture & Safe Cleanup
   addSimulatedMeeting: (meeting: Meeting) => void;
+  deleteSimulatedMeeting: (meetingId: string) => void;
+  cleanupSimulatedMeetings: () => void;
   toggleUpcomingAutoRecord: (eventId: string) => void;
   // User & Onboarding
   updateUserProfile: (partial: Partial<UserProfile>) => void;
@@ -199,6 +211,16 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       }
     ): HighlightClip => {
       const targetMeeting = state.meetings.find((m) => m.id === meetingId);
+      const portableShareToken = encodePortableClipToken({
+        meetingId,
+        title: payload.title,
+        tag: payload.tag,
+        startTime: payload.startTime,
+        endTime: payload.endTime,
+        speakerName: payload.speakerName,
+        transcriptExcerpt: payload.transcriptExcerpt,
+        createdBy: state.user.name,
+      });
       const newClip: HighlightClip = {
         id: `clip-${Date.now()}`,
         meetingId,
@@ -210,7 +232,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         createdBy: state.user.name,
         createdAt: new Date().toISOString(),
         notes: payload.notes,
-        shareToken: `clip-${Math.random().toString(36).substring(2, 9)}`,
+        shareToken: portableShareToken,
         viewCount: 1,
         transcriptExcerpt: payload.transcriptExcerpt,
         speakerName: payload.speakerName,
@@ -326,6 +348,39 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     [persistState, showToast, state.meetings, state.user.workspaceName]
   );
 
+  const updateActionItem = useCallback(
+    (
+      actionItemId: string,
+      payload: {
+        title?: string;
+        assigneeName?: string;
+        dueDate?: string;
+        priority?: "high" | "medium" | "low";
+      }
+    ) => {
+      persistState((prev) => ({
+        ...prev,
+        meetings: prev.meetings.map((m) => ({
+          ...m,
+          actionItems: m.actionItems.map((item) =>
+            item.id === actionItemId
+              ? {
+                  ...item,
+                  title: payload.title !== undefined ? payload.title : item.title,
+                  assigneeName:
+                    payload.assigneeName !== undefined ? payload.assigneeName : item.assigneeName,
+                  dueDate: payload.dueDate !== undefined ? payload.dueDate : item.dueDate,
+                  priority: payload.priority !== undefined ? payload.priority : item.priority,
+                }
+              : item
+          ),
+        })),
+      }));
+      showToast("Action item updated");
+    },
+    [persistState, showToast]
+  );
+
   const deleteActionItem = useCallback(
     (actionItemId: string) => {
       persistState((prev) => ({
@@ -362,6 +417,33 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     },
     [persistState, showToast]
   );
+
+  const deleteSimulatedMeeting = useCallback(
+    (meetingId: string) => {
+      persistState((prev) => ({
+        ...prev,
+        meetings: prev.meetings.filter(
+          (m) => !(m.id === meetingId && (m.isSimulatedCapture || m.id.startsWith("mtg-sim-")))
+        ),
+        activities: prev.activities.filter((a) => a.meetingId !== meetingId),
+      }));
+      showToast("Simulated meeting removed while preserving seeded workspace");
+    },
+    [persistState, showToast]
+  );
+
+  const cleanupSimulatedMeetings = useCallback(() => {
+    persistState((prev) => ({
+      ...prev,
+      meetings: prev.meetings.filter(
+        (m) => !m.isSimulatedCapture && !m.id.startsWith("mtg-sim-")
+      ),
+      activities: prev.activities.filter(
+        (a) => !a.meetingId || !a.meetingId.startsWith("mtg-sim-")
+      ),
+    }));
+    showToast("Removed all simulated test calls (seeded meetings & custom edits preserved)");
+  }, [persistState, showToast]);
 
   const toggleUpcomingAutoRecord = useCallback(
     (eventId: string) => {
@@ -488,8 +570,11 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       deleteHighlightClip,
       toggleActionItem,
       addActionItem,
+      updateActionItem,
       deleteActionItem,
       addSimulatedMeeting,
+      deleteSimulatedMeeting,
+      cleanupSimulatedMeetings,
       toggleUpcomingAutoRecord,
       updateUserProfile,
       updateUserPreferences,
@@ -511,8 +596,11 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       deleteHighlightClip,
       toggleActionItem,
       addActionItem,
+      updateActionItem,
       deleteActionItem,
       addSimulatedMeeting,
+      deleteSimulatedMeeting,
+      cleanupSimulatedMeetings,
       toggleUpcomingAutoRecord,
       updateUserProfile,
       updateUserPreferences,

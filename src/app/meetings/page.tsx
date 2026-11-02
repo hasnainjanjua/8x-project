@@ -12,17 +12,31 @@ import {
   Sparkles,
   Users,
   SlidersHorizontal,
+  Trash2,
 } from "lucide-react";
 import { useWorkspace } from "@/context/WorkspaceContext";
 import { MeetingCategory, MeetingPlatform } from "@/types/fathom";
 import { formatDurationHuman, formatRelativeDate } from "@/lib/utils";
 
 export default function MeetingsLibraryPage() {
-  const { state, setLiveRecorderModalOpen } = useWorkspace();
+  const {
+    state,
+    setLiveRecorderModalOpen,
+    deleteSimulatedMeeting,
+    cleanupSimulatedMeetings,
+  } = useWorkspace();
   const [searchQuery, setSearchQuery] = useState("");
   const [scopeTab, setScopeTab] = useState<"all" | "my_calls" | "team_calls" | "external">("all");
   const [platformFilter, setPlatformFilter] = useState<"all" | MeetingPlatform>("all");
   const [categoryFilter, setCategoryFilter] = useState<"all" | MeetingCategory>("all");
+
+  const simulatedCount = useMemo(
+    () =>
+      state.meetings.filter(
+        (m) => m.isSimulatedCapture || m.id.startsWith("mtg-sim-")
+      ).length,
+    [state.meetings]
+  );
 
   const filteredMeetings = useMemo(() => {
     return state.meetings.filter((m) => {
@@ -56,13 +70,25 @@ export default function MeetingsLibraryPage() {
             Browse all recorded customer calls, product reviews, and engineering standups with speaker talk-time ratios
           </p>
         </div>
-        <button
-          onClick={() => setLiveRecorderModalOpen(true)}
-          className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white shadow-lg shadow-indigo-600/20 hover:bg-indigo-500"
-        >
-          <Radio className="h-4 w-4 text-rose-300" />
-          <span>Simulate New Call Recording</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2.5">
+          {simulatedCount > 0 && (
+            <button
+              onClick={cleanupSimulatedMeetings}
+              className="flex items-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3.5 py-2.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/20"
+              title="Safely remove only simulated test recordings"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              <span>Clean Up Simulated Calls ({simulatedCount})</span>
+            </button>
+          )}
+          <button
+            onClick={() => setLiveRecorderModalOpen(true)}
+            className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white shadow-lg shadow-indigo-600/20 hover:bg-indigo-500"
+          >
+            <Radio className="h-4 w-4 text-rose-300" />
+            <span>Simulate New Call Recording</span>
+          </button>
+        </div>
       </div>
 
       {/* Filters & Search Bar */}
@@ -176,7 +202,17 @@ export default function MeetingsLibraryPage() {
                   <p className="text-xs text-gray-400">{mtg.subtitle}</p>
                 </div>
 
-                <div className="flex shrink-0 items-center gap-2.5">
+                <div className="flex flex-wrap shrink-0 items-center gap-2">
+                  {(mtg.isSimulatedCapture || mtg.id.startsWith("mtg-sim-")) && (
+                    <button
+                      onClick={() => deleteSimulatedMeeting(mtg.id)}
+                      className="flex items-center gap-1 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-300 hover:bg-amber-500/20"
+                      title="Remove this simulated test recording"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      <span>Delete Simulation</span>
+                    </button>
+                  )}
                   <Link
                     href={`/share/${mtg.shareToken}`}
                     className="flex items-center gap-1.5 rounded-xl border border-[#262D40] bg-[#161B29] px-3 py-2 text-xs font-medium text-gray-200 hover:border-[#00D4B2] hover:text-[#00D4B2]"

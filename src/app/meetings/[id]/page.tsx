@@ -1,7 +1,7 @@
 "use client";
 
 import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   Play,
@@ -20,6 +20,8 @@ import {
   Search,
   Edit3,
   Check,
+  X,
+  Trash2,
   ArrowLeft,
   ExternalLink,
   AlertTriangle,
@@ -33,6 +35,7 @@ import { formatDurationHuman, formatRelativeDate, formatTimestamp } from "@/lib/
 
 function MeetingStudioInner() {
   const params = useParams();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const meetingId = String(params?.id || "");
   const initialTimeParam = Number(searchParams?.get("t") || 0);
@@ -45,6 +48,9 @@ function MeetingStudioInner() {
     deleteHighlightClip,
     toggleActionItem,
     addActionItem,
+    updateActionItem,
+    deleteActionItem,
+    deleteSimulatedMeeting,
     showToast,
   } = useWorkspace();
 
@@ -85,6 +91,13 @@ function MeetingStudioInner() {
   const [newTaskOwner, setNewTaskOwner] = useState(meeting?.participants[0]?.name || "Hasnain Janjua");
   const [newTaskDue, setNewTaskDue] = useState("Friday");
   const [newTaskPriority, setNewTaskPriority] = useState<"high" | "medium" | "low">("high");
+
+  // Inline Edit Action Item State
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editTaskTitle, setEditTaskTitle] = useState("");
+  const [editTaskOwner, setEditTaskOwner] = useState("");
+  const [editTaskDue, setEditTaskDue] = useState("");
+  const [editTaskPriority, setEditTaskPriority] = useState<"high" | "medium" | "low">("high");
 
   // Ask Fathom AI Chat State
   const [askQuestionInput, setAskQuestionInput] = useState("");
@@ -341,12 +354,24 @@ function MeetingStudioInner() {
         </div>
       </div>
 
-      {meeting.isSimulatedCapture && (
-        <div className="flex items-center gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-xs text-amber-200">
-          <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0" />
-          <span>
-            <strong>Simulated Capture Session:</strong> This meeting was created via the in-app Live Capture Simulator and is paired with a real playable WAV audio sample.
-          </span>
+      {(meeting.isSimulatedCapture || meeting.id.startsWith("mtg-sim-")) && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-xs text-amber-200">
+          <div className="flex items-center gap-2.5">
+            <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0" />
+            <span>
+              <strong>Simulated Capture Session:</strong> This meeting was created via the in-app Live Capture Simulator and is paired with a real multi-speaker WAV audio recording.
+            </span>
+          </div>
+          <button
+            onClick={() => {
+              deleteSimulatedMeeting(meeting.id);
+              router.push("/meetings");
+            }}
+            className="flex items-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/20 px-3 py-1.5 text-xs font-semibold text-amber-200 hover:bg-rose-500/25 hover:border-rose-500/40 hover:text-rose-200 transition"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            <span>Delete Simulated Call</span>
+          </button>
         </div>
       )}
 
@@ -795,45 +820,139 @@ function MeetingStudioInner() {
                 </div>
 
                 <div className="space-y-2.5">
-                  {meeting.actionItems.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-start justify-between gap-3 rounded-xl border border-[#1E2436] bg-[#141824] p-3.5"
-                    >
-                      <div className="flex items-start gap-3">
-                        <input
-                          type="checkbox"
-                          checked={item.completed}
-                          onChange={() => toggleActionItem(item.id)}
-                          className="mt-0.5 h-4 w-4 rounded accent-[#00D4B2] cursor-pointer"
-                        />
-                        <div>
-                          <p
-                            className={`text-xs font-semibold ${
-                              item.completed ? "line-through text-gray-500" : "text-white"
-                            }`}
+                  {meeting.actionItems.map((item) => {
+                    const isEditingTask = editingTaskId === item.id;
+                    return (
+                      <div
+                        key={item.id}
+                        className="flex flex-col justify-between gap-3 rounded-xl border border-[#1E2436] bg-[#141824] p-3.5 sm:flex-row sm:items-start"
+                      >
+                        <div className="flex flex-1 items-start gap-3">
+                          <input
+                            type="checkbox"
+                            checked={item.completed}
+                            onChange={() => toggleActionItem(item.id)}
+                            className="mt-0.5 h-4 w-4 rounded accent-[#00D4B2] cursor-pointer"
+                          />
+                          {isEditingTask ? (
+                            <div className="flex-1 space-y-2">
+                              <input
+                                type="text"
+                                value={editTaskTitle}
+                                onChange={(e) => setEditTaskTitle(e.target.value)}
+                                className="w-full rounded-lg border border-indigo-500 bg-[#0D1017] px-2.5 py-1 text-xs text-white focus:outline-none"
+                              />
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <input
+                                  type="text"
+                                  value={editTaskOwner}
+                                  onChange={(e) => setEditTaskOwner(e.target.value)}
+                                  placeholder="Owner"
+                                  className="rounded-lg border border-[#252B3D] bg-[#0D1017] px-2 py-1 text-[11px] text-white"
+                                />
+                                <input
+                                  type="text"
+                                  value={editTaskDue}
+                                  onChange={(e) => setEditTaskDue(e.target.value)}
+                                  placeholder="Due"
+                                  className="rounded-lg border border-[#252B3D] bg-[#0D1017] px-2 py-1 text-[11px] text-white"
+                                />
+                                <select
+                                  value={editTaskPriority}
+                                  onChange={(e) =>
+                                    setEditTaskPriority(
+                                      e.target.value as "high" | "medium" | "low"
+                                    )
+                                  }
+                                  className="rounded-lg border border-[#252B3D] bg-[#0D1017] px-2 py-1 text-[11px] text-gray-200"
+                                >
+                                  <option value="high">High</option>
+                                  <option value="medium">Medium</option>
+                                  <option value="low">Low</option>
+                                </select>
+                                <button
+                                  onClick={() => {
+                                    if (editTaskTitle.trim()) {
+                                      updateActionItem(item.id, {
+                                        title: editTaskTitle.trim(),
+                                        assigneeName:
+                                          editTaskOwner.trim() || item.assigneeName,
+                                        dueDate: editTaskDue.trim() || item.dueDate,
+                                        priority: editTaskPriority,
+                                      });
+                                    }
+                                    setEditingTaskId(null);
+                                  }}
+                                  className="flex items-center gap-1 rounded bg-emerald-600 px-2 py-1 text-[11px] font-semibold text-white"
+                                >
+                                  <Check className="h-3 w-3" />
+                                  <span>Save</span>
+                                </button>
+                                <button
+                                  onClick={() => setEditingTaskId(null)}
+                                  className="flex items-center gap-1 rounded bg-[#1E2436] px-2 py-1 text-[11px] text-gray-300"
+                                >
+                                  <X className="h-3 w-3" />
+                                  <span>Cancel</span>
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div>
+                              <p
+                                className={`text-xs font-semibold ${
+                                  item.completed
+                                    ? "line-through text-gray-500"
+                                    : "text-white"
+                                }`}
+                              >
+                                {item.title}
+                              </p>
+                              <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-gray-400">
+                                <span>Owner: {item.assigneeName}</span>
+                                <span>•</span>
+                                <span>Due: {item.dueDate}</span>
+                                <span className="rounded bg-indigo-500/15 px-1.5 py-0.5 font-mono text-[10px] uppercase text-indigo-300">
+                                  {item.priority}
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1.5 self-end sm:self-center">
+                          <button
+                            onClick={() => handleSeek(item.timestampSeconds)}
+                            className="shrink-0 rounded-md border border-[#00D4B2]/30 bg-[#00D4B2]/10 px-2 py-1 font-mono text-[11px] text-[#00D4B2] hover:bg-[#00D4B2] hover:text-slate-950"
                           >
-                            {item.title}
-                          </p>
-                          <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-gray-400">
-                            <span>Owner: {item.assigneeName}</span>
-                            <span>•</span>
-                            <span>Due: {item.dueDate}</span>
-                            <span className="rounded bg-indigo-500/15 px-1.5 py-0.5 font-mono text-[10px] uppercase text-indigo-300">
-                              {item.priority}
-                            </span>
-                          </div>
+                            ▶ @{formatTimestamp(item.timestampSeconds)}
+                          </button>
+                          {!isEditingTask && (
+                            <button
+                              onClick={() => {
+                                setEditingTaskId(item.id);
+                                setEditTaskTitle(item.title);
+                                setEditTaskOwner(item.assigneeName);
+                                setEditTaskDue(item.dueDate);
+                                setEditTaskPriority(item.priority);
+                              }}
+                              className="rounded-md p-1 text-gray-400 hover:bg-indigo-500/15 hover:text-indigo-300"
+                              title="Edit action item"
+                            >
+                              <Edit3 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                          <button
+                            onClick={() => deleteActionItem(item.id)}
+                            className="rounded-md p-1 text-gray-500 hover:bg-rose-500/15 hover:text-rose-400"
+                            title="Delete action item"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
                         </div>
                       </div>
-
-                      <button
-                        onClick={() => handleSeek(item.timestampSeconds)}
-                        className="shrink-0 rounded-md border border-[#00D4B2]/30 bg-[#00D4B2]/10 px-2 py-1 font-mono text-[11px] text-[#00D4B2] hover:bg-[#00D4B2] hover:text-slate-950"
-                      >
-                        ▶ @{formatTimestamp(item.timestampSeconds)}
-                      </button>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}

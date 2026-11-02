@@ -17,6 +17,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { useWorkspace } from "@/context/WorkspaceContext";
+import { decodePortableClipToken } from "@/lib/share-token";
 import { formatDurationHuman, formatRelativeDate, formatTimestamp } from "@/lib/utils";
 
 export default function PublicSharePage() {
@@ -24,7 +25,10 @@ export default function PublicSharePage() {
   const token = String(params?.token || "");
   const { state, isHydrated, showToast } = useWorkspace();
 
-  // Token can match either a full Meeting shareToken OR an individual HighlightClip shareToken.
+  // Token can match:
+  // 1) A full Meeting shareToken or ID
+  // 2) A seeded or locally stored HighlightClip shareToken
+  // 3) A self-contained portable clip token (`c1_<sig>_<base64url>`) that works across ANY browser/device
   // Never fall back to an unrelated meeting if the token cannot be resolved.
   const resolved = useMemo(() => {
     for (const m of state.meetings) {
@@ -36,6 +40,19 @@ export default function PublicSharePage() {
         return { mode: "clip" as const, meeting: m, clip: foundClip };
       }
     }
+
+    const decodedPortable = decodePortableClipToken(token, (meetingId) => {
+      const found = state.meetings.find((m) => m.id === meetingId);
+      return found?.title;
+    });
+    if (decodedPortable) {
+      const parentMeeting =
+        state.meetings.find((m) => m.id === decodedPortable.meetingId) || null;
+      if (parentMeeting) {
+        return { mode: "clip" as const, meeting: parentMeeting, clip: decodedPortable };
+      }
+    }
+
     return {
       mode: "not_found" as const,
       meeting: null,
