@@ -14,6 +14,7 @@ import {
   Scissors,
   ArrowRight,
   Volume2,
+  AlertTriangle,
 } from "lucide-react";
 import { useWorkspace } from "@/context/WorkspaceContext";
 import { formatDurationHuman, formatRelativeDate, formatTimestamp } from "@/lib/utils";
@@ -21,9 +22,10 @@ import { formatDurationHuman, formatRelativeDate, formatTimestamp } from "@/lib/
 export default function PublicSharePage() {
   const params = useParams();
   const token = String(params?.token || "");
-  const { state, showToast } = useWorkspace();
+  const { state, isHydrated, showToast } = useWorkspace();
 
-  // Token can match either a full Meeting shareToken OR an individual HighlightClip shareToken
+  // Token can match either a full Meeting shareToken OR an individual HighlightClip shareToken.
+  // Never fall back to an unrelated meeting if the token cannot be resolved.
   const resolved = useMemo(() => {
     for (const m of state.meetings) {
       if (m.shareToken === token || m.id === token) {
@@ -35,8 +37,8 @@ export default function PublicSharePage() {
       }
     }
     return {
-      mode: "meeting" as const,
-      meeting: state.meetings[0],
+      mode: "not_found" as const,
+      meeting: null,
       clip: null,
     };
   }, [state.meetings, token]);
@@ -46,7 +48,59 @@ export default function PublicSharePage() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(clip ? clip.startTime : 0);
 
-  if (!meeting) return null;
+  if (!meeting) {
+    return (
+      <div className="min-h-screen bg-[#090B10] text-gray-100 flex flex-col">
+        <header className="border-b border-[#1E2330] bg-[#0D1017]">
+          <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
+            <div className="flex items-center gap-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-[#00D4B2]">
+                <Sparkles className="h-4 w-4 text-slate-950 stroke-[2.5]" />
+              </div>
+              <span className="font-bold tracking-tight text-white">FATHOM AI</span>
+            </div>
+            <Link
+              href="/"
+              className="flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-indigo-500"
+            >
+              <span>Enter Demo Workspace</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+        </header>
+
+        <div className="flex flex-1 items-center justify-center p-6">
+          <div className="w-full max-w-lg rounded-2xl border border-[#262C3E] bg-[#111520] p-6 text-center space-y-4 shadow-2xl">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-amber-500/15 border border-amber-500/30">
+              <AlertTriangle className="h-6 w-6 text-amber-400" />
+            </div>
+            <h1 className="text-lg font-bold text-white">
+              This shared meeting or clip is unavailable
+            </h1>
+            <p className="text-xs leading-relaxed text-gray-400">
+              {!isHydrated
+                ? `Checking local workspace storage for share token "${token}"...`
+                : `The share token "${token}" could not be resolved. Custom clips created during a browser session are stored in that browser's localStorage (or ephemeral serverless cache) and are not available in a different browser after a cold start.`}
+            </p>
+            <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-2.5">
+              <Link
+                href="/share/share-acme-q4-discovery"
+                className="w-full sm:w-auto rounded-xl border border-[#00D4B2]/40 bg-[#00D4B2]/10 px-4 py-2 text-xs font-semibold text-[#00D4B2] hover:bg-[#00D4B2]/20"
+              >
+                View Seeded Shared Meeting
+              </Link>
+              <Link
+                href="/"
+                className="w-full sm:w-auto rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-500"
+              >
+                Go to Fathom Workspace
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const activeSummary =
     meeting.summariesByTemplate[meeting.activeTemplateId] ||
