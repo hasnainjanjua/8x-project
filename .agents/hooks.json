@@ -1,6 +1,13 @@
 {
   "agent-capture": {
-    "Stop": [
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "python capture.py",
+        "timeout": 30
+      }
+    ],
+    "PreInvocation": [
       {
         "type": "command",
         "command": "python capture.py",
@@ -8,6 +15,13 @@
       }
     ],
     "PostInvocation": [
+      {
+        "type": "command",
+        "command": "python capture.py",
+        "timeout": 30
+      }
+    ],
+    "Stop": [
       {
         "type": "command",
         "command": "python capture.py",
