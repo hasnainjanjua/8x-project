@@ -50,10 +50,10 @@ export default function SettingsPage() {
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-2xl font-bold text-white">
-            Workspace Settings, AI Templates & Integrations
+            Workspace Settings, Summary Templates & Integrations
           </h1>
           <p className="text-xs text-gray-400">
-            Configure your user profile, auto-recording rules, CRM sync connections, and persistence controls
+            Configure your user profile, auto-recording rules, CRM sync connections, and workspace data controls
           </p>
         </div>
 
@@ -98,19 +98,6 @@ export default function SettingsPage() {
               </button>
             </div>
           )}
-        </div>
-      </div>
-
-      {/* Persistence Architecture Disclosure Card */}
-      <div className="rounded-2xl border border-indigo-500/30 bg-indigo-500/10 p-4 flex items-start gap-3">
-        <Database className="h-5 w-5 text-[#00D4B2] shrink-0 mt-0.5" />
-        <div className="space-y-1 text-xs">
-          <p className="font-bold text-white">
-            Hybrid Persistence Architecture (Server JSON API + Client LocalStorage)
-          </p>
-          <p className="text-gray-300 leading-relaxed">
-            All changes you make—switching AI templates, editing transcript lines, completing action items, or creating new highlight clips—are persisted both to your browser’s <code className="font-mono text-indigo-300">localStorage</code> and synced via <code className="font-mono text-indigo-300">PUT /api/workspace</code>. Note: on serverless platforms with ephemeral filesystems, per-evaluator browser storage guarantees your custom edits persist across reloads without colliding with other visitors.
-          </p>
         </div>
       </div>
 

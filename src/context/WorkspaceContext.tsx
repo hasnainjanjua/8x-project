@@ -9,7 +9,6 @@ import React, {
   useState,
 } from "react";
 import { INITIAL_WORKSPACE_STATE } from "@/data/seed-meetings";
-import { encodePortableClipToken } from "@/lib/share-token";
 import {
   ActionItem,
   HighlightClip,
@@ -20,7 +19,7 @@ import {
   WorkspaceState,
 } from "@/types/fathom";
 
-const STORAGE_KEY = "fathom_ai_workspace_v1";
+const STORAGE_KEY = "fathom_ai_workspace_v3";
 
 interface WorkspaceContextValue {
   state: WorkspaceState;
@@ -172,7 +171,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           m.id === meetingId ? { ...m, activeTemplateId: templateId } : m
         ),
       }));
-      showToast(`Switched AI Summary template to ${templateId.replace("_", " ").toUpperCase()}`);
+      showToast(`Switched summary view to ${templateId.replace("_", " ").toUpperCase()}`);
     },
     [persistState, showToast]
   );
@@ -211,18 +210,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       }
     ): HighlightClip => {
       const targetMeeting = state.meetings.find((m) => m.id === meetingId);
-      const portableShareToken = encodePortableClipToken({
-        meetingId,
-        title: payload.title,
-        tag: payload.tag,
-        startTime: payload.startTime,
-        endTime: payload.endTime,
-        speakerName: payload.speakerName,
-        transcriptExcerpt: payload.transcriptExcerpt,
-        createdBy: state.user.name,
-      });
+      const clipId = `clip-${Date.now()}`;
       const newClip: HighlightClip = {
-        id: `clip-${Date.now()}`,
+        id: clipId,
         meetingId,
         meetingTitle: targetMeeting?.title || "Recorded Meeting",
         title: payload.title,
@@ -232,7 +222,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         createdBy: state.user.name,
         createdAt: new Date().toISOString(),
         notes: payload.notes,
-        shareToken: portableShareToken,
+        shareToken: clipId,
         viewCount: 1,
         transcriptExcerpt: payload.transcriptExcerpt,
         speakerName: payload.speakerName,
@@ -266,6 +256,45 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           ...prev.activities,
         ],
       }));
+
+      // Request server-signed HMAC-SHA256 portable token so the clip URL works across browsers/devices
+      const signTargetMeetingId = meetingId.startsWith("mtg-sim-")
+        ? "mtg-eng-architecture"
+        : meetingId;
+      fetch("/api/share-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          meetingId: signTargetMeetingId,
+          title: payload.title,
+          tag: payload.tag,
+          startTime: payload.startTime,
+          endTime: payload.endTime,
+          speakerName: payload.speakerName,
+          transcriptExcerpt: payload.transcriptExcerpt,
+          createdBy: state.user.name,
+        }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.ok && typeof data.token === "string") {
+            persistState((prev) => ({
+              ...prev,
+              meetings: prev.meetings.map((m) =>
+                m.id === meetingId
+                  ? {
+                      ...m,
+                      highlights: m.highlights.map((h) =>
+                        h.id === clipId ? { ...h, shareToken: data.token } : h
+                      ),
+                    }
+                  : m
+              ),
+            }));
+          }
+        })
+        .catch(() => {});
+
       showToast(`Highlight clip "${payload.title}" created & ready to share`);
       return newClip;
     },

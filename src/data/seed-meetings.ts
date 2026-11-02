@@ -1,6 +1,7 @@
 import {
   Meeting,
   MeetingSummary,
+  Participant,
   SummaryTemplateId,
   TranscriptSegment,
   WorkspaceState,
@@ -22,35 +23,98 @@ export const SUMMARY_TEMPLATES_META: {
     id: "meddpicc",
     name: "Sales Discovery (MEDDPICC)",
     badge: "Sales",
-    description: "Extracts Metrics, Economic Buyer, Decision Criteria, Pain, Champion, and Competition.",
+    description: "Formats captured notes into Metrics, Economic Buyer, Decision Criteria, and Pain.",
   },
   {
     id: "customer_success",
     name: "Customer Success / QBR",
     badge: "CS & Account",
-    description: "Highlights account health, adoption wins, renewal risks, and expansion opportunities.",
+    description: "Structures captured notes around adoption outcomes, technical requirements, and expansion.",
   },
   {
     id: "one_on_one",
     name: "1-on-1 Check-in",
     badge: "Leadership",
-    description: "Captures priorities, blockers, coaching feedback, and career growth items.",
+    description: "Organizes discussion points into key updates, open items, and agreed commitments.",
   },
   {
     id: "user_research",
     name: "Product Feedback & User Research",
     badge: "Product",
-    description: "Synthesizes workflow friction, feature requests, usability insights, and verbatim quotes.",
+    description: "Groups transcript insights into workflow friction, feature requirements, and verbatim quotes.",
   },
   {
     id: "sprint_sync",
     name: "Engineering & Architecture Sync",
     badge: "Engineering",
-    description: "Documents technical trade-offs, system bottlenecks, PR blockers, and release timelines.",
+    description: "Structures technical benchmarks, architecture decisions, and implementation tasks.",
   },
 ];
 
-// Helper to build all 6 template summaries for any meeting so switching templates is instantaneous and rich
+// Deterministic helper that computes each participant's talkTimeSeconds, talkTimePercentage,
+// and questionsAsked directly from the meeting transcript (single source of truth).
+function enrichParticipantsFromTranscript(
+  participants: Omit<Participant, "talkTimeSeconds" | "talkTimePercentage" | "questionsAsked">[],
+  transcript: TranscriptSegment[]
+): Participant[] {
+  const rawSecondsBySpeaker = new Map<string, number>();
+  const questionsBySpeaker = new Map<string, number>();
+
+  for (const seg of transcript) {
+    const segDur = Math.max(1, seg.endTime - seg.startTime);
+    rawSecondsBySpeaker.set(
+      seg.speakerId,
+      (rawSecondsBySpeaker.get(seg.speakerId) || 0) + segDur
+    );
+    const qCount = (seg.text.match(/\?/g) || []).length;
+    questionsBySpeaker.set(
+      seg.speakerId,
+      (questionsBySpeaker.get(seg.speakerId) || 0) + qCount
+    );
+  }
+
+  const totalSpokenSeconds =
+    Array.from(rawSecondsBySpeaker.values()).reduce((a, b) => a + b, 0) || 1;
+
+  let allocatedPct = 0;
+  return participants.map((p, idx) => {
+    const talkTimeSeconds = rawSecondsBySpeaker.get(p.id) || 0;
+    const isLast = idx === participants.length - 1;
+    const talkTimePercentage = isLast
+      ? Math.max(0, 100 - allocatedPct)
+      : Math.round((talkTimeSeconds / totalSpokenSeconds) * 100);
+    allocatedPct += talkTimePercentage;
+
+    return {
+      ...p,
+      talkTimeSeconds,
+      talkTimePercentage,
+      questionsAsked: questionsBySpeaker.get(p.id) || 0,
+    };
+  });
+}
+
+function computeMetricsFromTranscript(
+  transcript: TranscriptSegment[],
+  engagementScore: number
+): Meeting["metrics"] {
+  const questionsAsked = transcript.reduce(
+    (sum, seg) => sum + (seg.text.match(/\?/g) || []).length,
+    0
+  );
+  const longestMonologueSeconds = transcript.reduce(
+    (max, seg) => Math.max(max, Math.max(1, seg.endTime - seg.startTime)),
+    0
+  );
+  return {
+    questionsAsked,
+    longestMonologueSeconds,
+    sentimentScore: "positive",
+    engagementScore,
+  };
+}
+
+// Helper to build all 6 template views grounded strictly in each meeting's actual transcript & decisions
 function createTemplateVariants(
   base: {
     general: Omit<MeetingSummary, "templateId" | "templateName" | "templateBadge">;
@@ -63,9 +127,10 @@ function createTemplateVariants(
   transcript: TranscriptSegment[],
   title: string
 ): Record<SummaryTemplateId, MeetingSummary> {
-  const firstSeg = transcript[0];
-  const midSeg = transcript[Math.floor(transcript.length / 2)] || firstSeg;
-  const lastSeg = transcript[transcript.length - 1] || firstSeg;
+  const seg0 = transcript[0];
+  const seg1 = transcript[1] || seg0;
+  const seg2 = transcript[2] || seg1;
+  const segLast = transcript[transcript.length - 1] || seg0;
 
   const general: MeetingSummary = {
     templateId: "general",
@@ -79,50 +144,51 @@ function createTemplateVariants(
     templateName: "Sales Discovery (MEDDPICC)",
     templateBadge: "Sales",
     ...(base.meddpicc || {
-      tldr: `MEDDPICC qualification analysis for ${title}: Identified quantifiable efficiency metrics, confirmed technical & economic decision-makers, and mapped key evaluation criteria.`,
+      tldr: `${base.general.tldr}`,
       sections: [
         {
           id: "m-metrics",
-          title: "Metrics & Quantifiable Impact",
+          title: "Metrics & Quantifiable Outcomes",
           items: [
             {
               id: "mm-1",
-              text: "Target 35% reduction in manual post-call CRM data entry across 45 seat holders.",
-              timestampSeconds: firstSeg?.startTime ?? 12,
-              speakerName: firstSeg?.speakerName,
-              badge: "ROI Target",
+              text: seg0.text,
+              timestampSeconds: seg0.startTime,
+              speakerName: seg0.speakerName,
+              badge: "Context & Scope",
             },
             {
               id: "mm-2",
-              text: "Accelerate new rep ramp time by sharing curated objection-handling clips.",
-              timestampSeconds: midSeg?.startTime ?? 48,
-              speakerName: midSeg?.speakerName,
+              text: seg1.text,
+              timestampSeconds: seg1.startTime,
+              speakerName: seg1.speakerName,
+              badge: "Measured Impact",
             },
           ],
         },
         {
-          id: "m-eb",
-          title: "Economic Buyer & Decision Process",
+          id: "m-criteria",
+          title: "Decision Criteria & Technical Validation",
           items: [
             {
-              id: "meb-1",
-              text: "VP of Revenue Operations holds final budget sign-off; Security review via SOC2 Type II required prior to procurement.",
-              timestampSeconds: midSeg?.startTime ?? 64,
-              speakerName: midSeg?.speakerName,
-              badge: "Economic Buyer",
+              id: "mc-1",
+              text: seg2.text,
+              timestampSeconds: seg2.startTime,
+              speakerName: seg2.speakerName,
+              badge: "Decision Criteria",
             },
           ],
         },
         {
-          id: "m-pain",
-          title: "Identified Pain & Champion",
+          id: "m-next",
+          title: " Stakeholder Alignment & Next Steps",
           items: [
             {
-              id: "mp-1",
-              text: "Current workflow loses ~40% of customer feature requests between Zoom calls and Linear/HubSpot.",
-              timestampSeconds: lastSeg?.startTime ?? 95,
-              speakerName: lastSeg?.speakerName,
-              badge: "Core Pain",
+              id: "mn-1",
+              text: segLast.text,
+              timestampSeconds: segLast.startTime,
+              speakerName: segLast.speakerName,
+              badge: "Commitment",
             },
           ],
         },
@@ -137,44 +203,45 @@ function createTemplateVariants(
     templateName: "Customer Success / QBR",
     templateBadge: "CS & Account",
     ...(base.customer_success || {
-      tldr: `Account Health & QBR Assessment for ${title}: Strong executive sponsor alignment (Green Health Score: 88/100) with clear expansion milestones for Q4.`,
+      tldr: `${base.general.tldr}`,
       sections: [
         {
-          id: "cs-health",
-          title: "Account Health & Adoption Wins",
+          id: "cs-outcomes",
+          title: "Adoption & Workflow Outcomes",
           items: [
             {
-              id: "csh-1",
-              text: "Weekly active seat utilization reached 92% across product and revenue pods.",
-              timestampSeconds: firstSeg?.startTime ?? 15,
-              speakerName: firstSeg?.speakerName,
-              badge: "Health: Green",
+              id: "cso-1",
+              text: seg0.text,
+              timestampSeconds: seg0.startTime,
+              speakerName: seg0.speakerName,
+              badge: "Baseline",
+            },
+            {
+              id: "cso-2",
+              text: seg1.text,
+              timestampSeconds: seg1.startTime,
+              speakerName: seg1.speakerName,
+              badge: "Customer Voice",
             },
           ],
         },
         {
-          id: "cs-risks",
-          title: "Renewal Risks & Escalations",
+          id: "cs-reqs",
+          title: "Technical Requirements & Rollout Plan",
           items: [
             {
               id: "csr-1",
-              text: "Requires automated SSO SCIM provisioning and custom webhook payload formatting before annual true-up.",
-              timestampSeconds: midSeg?.startTime ?? 55,
-              speakerName: midSeg?.speakerName,
-              badge: "Mitigation Active",
+              text: seg2.text,
+              timestampSeconds: seg2.startTime,
+              speakerName: seg2.speakerName,
+              badge: "Requirement",
             },
-          ],
-        },
-        {
-          id: "cs-expansion",
-          title: "Expansion & Upsell Signals",
-          items: [
             {
-              id: "cse-1",
-              text: "EMEA Solutions Engineering team (18 additional seats) requested sandbox access next Tuesday.",
-              timestampSeconds: lastSeg?.startTime ?? 105,
-              speakerName: lastSeg?.speakerName,
-              badge: "+18 Seats",
+              id: "csr-2",
+              text: segLast.text,
+              timestampSeconds: segLast.startTime,
+              speakerName: segLast.speakerName,
+              badge: "Next Milestone",
             },
           ],
         },
@@ -189,30 +256,42 @@ function createTemplateVariants(
     templateName: "1-on-1 Check-in",
     templateBadge: "Leadership",
     ...(base.one_on_one || {
-      tldr: `1-on-1 alignment summary for ${title}: Reviewed sprint velocity, cleared cross-team dependencies, and aligned on Q4 ownership goals.`,
+      tldr: `${base.general.tldr}`,
       sections: [
         {
-          id: "oo-wins",
-          title: "Top Priorities & Recent Wins",
+          id: "oo-focus",
+          title: "Discussion Focus & Progress Updates",
           items: [
             {
-              id: "oow-1",
-              text: "Delivered core workflow ahead of schedule and aligned stakeholders on scope.",
-              timestampSeconds: firstSeg?.startTime ?? 10,
-              speakerName: firstSeg?.speakerName,
+              id: "oof-1",
+              text: seg0.text,
+              timestampSeconds: seg0.startTime,
+              speakerName: seg0.speakerName,
+            },
+            {
+              id: "oof-2",
+              text: seg1.text,
+              timestampSeconds: seg1.startTime,
+              speakerName: seg1.speakerName,
             },
           ],
         },
         {
-          id: "oo-blockers",
-          title: "Roadblocks & Support Needed",
+          id: "oo-follow",
+          title: "Key Takeaways & Commitments",
           items: [
             {
-              id: "oob-1",
-              text: "Needs faster design sign-off on edge-case states and API rate-limit clarification.",
-              timestampSeconds: midSeg?.startTime ?? 52,
-              speakerName: midSeg?.speakerName,
-              badge: "Needs Unblocking",
+              id: "oofl-1",
+              text: seg2.text,
+              timestampSeconds: seg2.startTime,
+              speakerName: seg2.speakerName,
+            },
+            {
+              id: "oofl-2",
+              text: segLast.text,
+              timestampSeconds: segLast.startTime,
+              speakerName: segLast.speakerName,
+              badge: "Agreed Follow-Up",
             },
           ],
         },
@@ -227,31 +306,43 @@ function createTemplateVariants(
     templateName: "Product Feedback & User Research",
     templateBadge: "Product",
     ...(base.user_research || {
-      tldr: `User research synthesis for ${title}: Uncovered high-value workflow friction around timestamp sharing and template switching.`,
+      tldr: `${base.general.tldr}`,
       sections: [
         {
-          id: "ur-friction",
-          title: "User Journey Friction Points",
+          id: "ur-pain",
+          title: "Observed Workflow Friction & Context",
           items: [
             {
-              id: "urf-1",
-              text: "Users spend 15+ minutes scrubbing 60-minute recordings when transcript timestamps aren't linked to summary bullets.",
-              timestampSeconds: firstSeg?.startTime ?? 18,
-              speakerName: firstSeg?.speakerName,
-              badge: "High Severity",
+              id: "urp-1",
+              text: seg0.text,
+              timestampSeconds: seg0.startTime,
+              speakerName: seg0.speakerName,
+            },
+            {
+              id: "urp-2",
+              text: seg1.text,
+              timestampSeconds: seg1.startTime,
+              speakerName: seg1.speakerName,
+              badge: "Primary Insight",
             },
           ],
         },
         {
-          id: "ur-requests",
-          title: "Top Feature Desires & Verbatim Signals",
+          id: "ur-reqs",
+          title: "Feature Requirements & Verbatim Feedback",
           items: [
             {
               id: "urr-1",
-              text: "Instant 1-click clip sharing that allows external stakeholders to watch a 30-second moment without logging in.",
-              timestampSeconds: midSeg?.startTime ?? 62,
-              speakerName: midSeg?.speakerName,
-              badge: "P0 Request",
+              text: seg2.text,
+              timestampSeconds: seg2.startTime,
+              speakerName: seg2.speakerName,
+              badge: "Requirement",
+            },
+            {
+              id: "urr-2",
+              text: segLast.text,
+              timestampSeconds: segLast.startTime,
+              speakerName: segLast.speakerName,
             },
           ],
         },
@@ -266,31 +357,43 @@ function createTemplateVariants(
     templateName: "Engineering & Architecture Sync",
     templateBadge: "Engineering",
     ...(base.sprint_sync || {
-      tldr: `Technical architecture & sprint review for ${title}: Finalized media synchronization pipeline, persistence boundaries, and deployment verification.`,
+      tldr: `${base.general.tldr}`,
       sections: [
         {
-          id: "ss-arch",
-          title: "Architecture & System Decisions",
+          id: "ss-tech",
+          title: "Technical Discussion & System Requirements",
           items: [
             {
-              id: "ssa-1",
-              text: "Adopted sub-second transcript segment indexing with deterministic template switching for zero-latency UI transitions.",
-              timestampSeconds: firstSeg?.startTime ?? 14,
-              speakerName: firstSeg?.speakerName,
-              badge: "Architecture",
+              id: "sst-1",
+              text: seg0.text,
+              timestampSeconds: seg0.startTime,
+              speakerName: seg0.speakerName,
+            },
+            {
+              id: "sst-2",
+              text: seg1.text,
+              timestampSeconds: seg1.startTime,
+              speakerName: seg1.speakerName,
+              badge: "System Metric",
             },
           ],
         },
         {
-          id: "ss-qa",
-          title: "Release Readiness & Action Plan",
+          id: "ss-exec",
+          title: "Implementation & Verification Plan",
           items: [
             {
-              id: "ssq-1",
-              text: "Verify public unauthenticated share routes and low-latency audio scrubbing across desktop and mobile viewports.",
-              timestampSeconds: lastSeg?.startTime ?? 92,
-              speakerName: lastSeg?.speakerName,
-              badge: "QA Gate",
+              id: "sse-1",
+              text: seg2.text,
+              timestampSeconds: seg2.startTime,
+              speakerName: seg2.speakerName,
+            },
+            {
+              id: "sse-2",
+              text: segLast.text,
+              timestampSeconds: segLast.startTime,
+              speakerName: segLast.speakerName,
+              badge: "Execution",
             },
           ],
         },
@@ -300,6 +403,7 @@ function createTemplateVariants(
     }),
   };
 
+  void title;
   return {
     general,
     meddpicc,
@@ -581,47 +685,41 @@ export const INITIAL_MEETINGS: Meeting[] = [
     mediaType: "audio",
     isSimulatedCapture: false,
     activeTemplateId: "meddpicc",
-    participants: [
-      {
-        id: "spk-hasnain",
-        name: "Hasnain Janjua",
-        email: "hasnain@fathom.video",
-        role: "Lead Product Engineer",
-        company: "Fathom AI",
-        isExternal: false,
-        avatarColor: "#6366F1",
-        initials: "HJ",
-        talkTimeSeconds: 62,
-        talkTimePercentage: 41,
-        questionsAsked: 4,
-      },
-      {
-        id: "spk-elena",
-        name: "Elena Rostova",
-        email: "elena.rostova@acmecorp.io",
-        role: "VP of Revenue Operations",
-        company: "Acme Corp",
-        isExternal: true,
-        avatarColor: "#00D4B2",
-        initials: "ER",
-        talkTimeSeconds: 53,
-        talkTimePercentage: 35,
-        questionsAsked: 2,
-      },
-      {
-        id: "spk-marcus",
-        name: "Marcus Vance",
-        email: "m.vance@acmecorp.io",
-        role: "Head of Security & IT",
-        company: "Acme Corp",
-        isExternal: true,
-        avatarColor: "#F59E0B",
-        initials: "MV",
-        talkTimeSeconds: 35,
-        talkTimePercentage: 24,
-        questionsAsked: 3,
-      },
-    ],
+    participants: enrichParticipantsFromTranscript(
+      [
+        {
+          id: "spk-hasnain",
+          name: "Hasnain Janjua",
+          email: "hasnain@fathom.video",
+          role: "Lead Product Engineer",
+          company: "Fathom AI",
+          isExternal: false,
+          avatarColor: "#6366F1",
+          initials: "HJ",
+        },
+        {
+          id: "spk-elena",
+          name: "Elena Rostova",
+          email: "elena.rostova@acmecorp.io",
+          role: "VP of Revenue Operations",
+          company: "Acme Corp",
+          isExternal: true,
+          avatarColor: "#00D4B2",
+          initials: "ER",
+        },
+        {
+          id: "spk-marcus",
+          name: "Marcus Vance",
+          email: "m.vance@acmecorp.io",
+          role: "Head of Security & IT",
+          company: "Acme Corp",
+          isExternal: true,
+          avatarColor: "#F59E0B",
+          initials: "MV",
+        },
+      ],
+      meeting1Transcript
+    ),
     transcript: meeting1Transcript,
     chapters: [
       {
@@ -816,7 +914,7 @@ export const INITIAL_MEETINGS: Meeting[] = [
         assigneeName: "Hasnain Janjua",
         assigneeEmail: "hasnain@fathom.video",
         assigneeCompany: "Fathom AI",
-        dueDate: "Today, 5:00 PM",
+        dueDate: "Mon, Nov 2",
         completed: true,
         priority: "high",
         timestampSeconds: 133,
@@ -831,7 +929,7 @@ export const INITIAL_MEETINGS: Meeting[] = [
         assigneeName: "Hasnain Janjua",
         assigneeEmail: "hasnain@fathom.video",
         assigneeCompany: "Fathom AI",
-        dueDate: "Tuesday, Nov 5",
+        dueDate: "Tue, Nov 3",
         completed: false,
         priority: "high",
         timestampSeconds: 138,
@@ -846,7 +944,7 @@ export const INITIAL_MEETINGS: Meeting[] = [
         assigneeName: "Elena Rostova",
         assigneeEmail: "elena.rostova@acmecorp.io",
         assigneeCompany: "Acme Corp",
-        dueDate: "Monday, Nov 4",
+        dueDate: "Wed, Nov 4",
         completed: false,
         priority: "medium",
         timestampSeconds: 112,
@@ -906,12 +1004,7 @@ export const INITIAL_MEETINGS: Meeting[] = [
           "If we can validate the HubSpot bi-directional sync in a 15-seat pilot by next Thursday and pass Marcus's SOC2 review, we have $84,000 in approved Q4 budget ready...",
       },
     ],
-    metrics: {
-      questionsAsked: 9,
-      longestMonologueSeconds: 33,
-      sentimentScore: "positive",
-      engagementScore: 94,
-    },
+    metrics: computeMetricsFromTranscript(meeting1Transcript, 94),
   },
   {
     id: "mtg-linear-product",
@@ -933,47 +1026,41 @@ export const INITIAL_MEETINGS: Meeting[] = [
     mediaType: "audio",
     isSimulatedCapture: false,
     activeTemplateId: "user_research",
-    participants: [
-      {
-        id: "spk-hasnain",
-        name: "Hasnain Janjua",
-        email: "hasnain@fathom.video",
-        role: "Lead Product Engineer",
-        company: "Fathom AI",
-        isExternal: false,
-        avatarColor: "#6366F1",
-        initials: "HJ",
-        talkTimeSeconds: 61,
-        talkTimePercentage: 51,
-        questionsAsked: 3,
-      },
-      {
-        id: "spk-claire",
-        name: "Claire Moreau",
-        email: "claire@fathom.video",
-        role: "Staff Product Designer",
-        company: "Fathom AI",
-        isExternal: false,
-        avatarColor: "#EC4899",
-        initials: "CM",
-        talkTimeSeconds: 26,
-        talkTimePercentage: 22,
-        questionsAsked: 2,
-      },
-      {
-        id: "spk-devon",
-        name: "Devon Brooks",
-        email: "devon@fathom.video",
-        role: "Principal Systems Architect",
-        company: "Fathom AI",
-        isExternal: false,
-        avatarColor: "#10B981",
-        initials: "DB",
-        talkTimeSeconds: 33,
-        talkTimePercentage: 27,
-        questionsAsked: 2,
-      },
-    ],
+    participants: enrichParticipantsFromTranscript(
+      [
+        {
+          id: "spk-hasnain",
+          name: "Hasnain Janjua",
+          email: "hasnain@fathom.video",
+          role: "Lead Product Engineer",
+          company: "Fathom AI",
+          isExternal: false,
+          avatarColor: "#6366F1",
+          initials: "HJ",
+        },
+        {
+          id: "spk-claire",
+          name: "Claire Moreau",
+          email: "claire@fathom.video",
+          role: "Staff Product Designer",
+          company: "Fathom AI",
+          isExternal: false,
+          avatarColor: "#EC4899",
+          initials: "CM",
+        },
+        {
+          id: "spk-devon",
+          name: "Devon Brooks",
+          email: "devon@fathom.video",
+          role: "Principal Systems Architect",
+          company: "Fathom AI",
+          isExternal: false,
+          avatarColor: "#10B981",
+          initials: "DB",
+        },
+      ],
+      meeting2Transcript
+    ),
     transcript: meeting2Transcript,
     chapters: [
       {
@@ -1039,7 +1126,7 @@ export const INITIAL_MEETINGS: Meeting[] = [
           keyDecisions: [
             {
               id: "p-dec1",
-              decision: "Ship bidirectional timestamp synchronization and unauthenticated /share/[token] pages for external evaluators.",
+              decision: "Ship bidirectional timestamp synchronization and public share views for external stakeholders.",
               timestampSeconds: 86,
               ownerName: "Hasnain Janjua",
               impact: "high",
@@ -1047,7 +1134,7 @@ export const INITIAL_MEETINGS: Meeting[] = [
           ],
           followUpEmailDraft: {
             subject: "Product Sync Notes: Template Switching & Public Clip Sharing",
-            body: `Team,\n\nGreat alignment today on the Q4 AI Summary Template switcher and synchronized player.\n\nAction Items:\n• [Hasnain] Finalize public logged-out share page (/share/[token]).\n• [Claire] Verify responsive layout states across desktop and tablet viewports.\n\nBest,\nHasnain`,
+            body: `Team,\n\nGreat alignment today on the Q4 AI Summary Template switcher and synchronized player.\n\nAction Items:\n• [Hasnain] Finalize public share view so external stakeholders can play clips without signing in.\n• [Claire] Audit keyboard shortcut accessibility for global search (Cmd/Ctrl+K).\n\nBest,\nHasnain`,
           },
         },
       },
@@ -1059,12 +1146,12 @@ export const INITIAL_MEETINGS: Meeting[] = [
         id: "act-prod-1",
         meetingId: "mtg-linear-product",
         meetingTitle: "Q4 Product & UX Review — AI Summary Templates & Clip Studio",
-        title: "Verify unauthenticated public share links (/share/[token]) in logged-out browser",
+        title: "Finalize public share view so external stakeholders can play highlight clips without signing in",
         assigneeId: "spk-hasnain",
         assigneeName: "Hasnain Janjua",
         assigneeEmail: "hasnain@fathom.video",
         assigneeCompany: "Fathom AI",
-        dueDate: "Today, 6:00 PM",
+        dueDate: "Mon, Nov 2",
         completed: true,
         priority: "high",
         timestampSeconds: 86,
@@ -1079,7 +1166,7 @@ export const INITIAL_MEETINGS: Meeting[] = [
         assigneeName: "Claire Moreau",
         assigneeEmail: "claire@fathom.video",
         assigneeCompany: "Fathom AI",
-        dueDate: "Tomorrow",
+        dueDate: "Wed, Nov 4",
         completed: false,
         priority: "medium",
         timestampSeconds: 18,
@@ -1120,12 +1207,7 @@ export const INITIAL_MEETINGS: Meeting[] = [
           "When someone clicks a timestamp badge inside the AI Summary or clicks any line in the transcript, the audio player must immediately seek to that exact second...",
       },
     ],
-    metrics: {
-      questionsAsked: 7,
-      longestMonologueSeconds: 34,
-      sentimentScore: "positive",
-      engagementScore: 96,
-    },
+    metrics: computeMetricsFromTranscript(meeting2Transcript, 96),
   },
   {
     id: "mtg-stripe-qbr",
@@ -1137,8 +1219,8 @@ export const INITIAL_MEETINGS: Meeting[] = [
     scope: "team_calls",
     visibility: "public_link",
     shareToken: "share-finscale-qbr",
-    scheduledAt: "2026-11-01T16:00:00Z",
-    startedAt: "2026-11-01T16:00:15Z",
+    scheduledAt: "2026-10-30T16:00:00Z",
+    startedAt: "2026-10-30T16:00:15Z",
     durationSeconds: 135,
     hostId: "usr-hasnain",
     hostName: "Hasnain Janjua",
@@ -1149,47 +1231,41 @@ export const INITIAL_MEETINGS: Meeting[] = [
     mediaType: "audio",
     isSimulatedCapture: false,
     activeTemplateId: "customer_success",
-    participants: [
-      {
-        id: "spk-hasnain",
-        name: "Hasnain Janjua",
-        email: "hasnain@fathom.video",
-        role: "Lead Product Engineer",
-        company: "Fathom AI",
-        isExternal: false,
-        avatarColor: "#6366F1",
-        initials: "HJ",
-        talkTimeSeconds: 57,
-        talkTimePercentage: 42,
-        questionsAsked: 3,
-      },
-      {
-        id: "spk-sarah",
-        name: "Sarah Jenkins",
-        email: "s.jenkins@finscale.com",
-        role: "Director of Customer Success",
-        company: "FinScale Global",
-        isExternal: true,
-        avatarColor: "#38BDF8",
-        initials: "SJ",
-        talkTimeSeconds: 45,
-        talkTimePercentage: 33,
-        questionsAsked: 2,
-      },
-      {
-        id: "spk-raj",
-        name: "Raj Patel",
-        email: "r.patel@finscale.com",
-        role: "VP of Solutions Architecture",
-        company: "FinScale Global",
-        isExternal: true,
-        avatarColor: "#A855F7",
-        initials: "RP",
-        talkTimeSeconds: 33,
-        talkTimePercentage: 25,
-        questionsAsked: 1,
-      },
-    ],
+    participants: enrichParticipantsFromTranscript(
+      [
+        {
+          id: "spk-hasnain",
+          name: "Hasnain Janjua",
+          email: "hasnain@fathom.video",
+          role: "Lead Product Engineer",
+          company: "Fathom AI",
+          isExternal: false,
+          avatarColor: "#6366F1",
+          initials: "HJ",
+        },
+        {
+          id: "spk-sarah",
+          name: "Sarah Jenkins",
+          email: "s.jenkins@finscale.com",
+          role: "Director of Customer Success",
+          company: "FinScale Global",
+          isExternal: true,
+          avatarColor: "#38BDF8",
+          initials: "SJ",
+        },
+        {
+          id: "spk-raj",
+          name: "Raj Patel",
+          email: "r.patel@finscale.com",
+          role: "VP of Solutions Architecture",
+          company: "FinScale Global",
+          isExternal: true,
+          avatarColor: "#A855F7",
+          initials: "RP",
+        },
+      ],
+      meeting3Transcript
+    ),
     transcript: meeting3Transcript,
     chapters: [
       {
@@ -1261,7 +1337,7 @@ export const INITIAL_MEETINGS: Meeting[] = [
         assigneeName: "Hasnain Janjua",
         assigneeEmail: "hasnain@fathom.video",
         assigneeCompany: "Fathom AI",
-        dueDate: "Friday, Nov 7",
+        dueDate: "Fri, Nov 6",
         completed: false,
         priority: "high",
         timestampSeconds: 116,
@@ -1276,7 +1352,7 @@ export const INITIAL_MEETINGS: Meeting[] = [
         assigneeName: "Sarah Jenkins",
         assigneeEmail: "s.jenkins@finscale.com",
         assigneeCompany: "FinScale Global",
-        dueDate: "Wednesday, Nov 5",
+        dueDate: "Wed, Nov 4",
         completed: true,
         priority: "medium",
         timestampSeconds: 122,
@@ -1293,7 +1369,7 @@ export const INITIAL_MEETINGS: Meeting[] = [
         startTime: 0,
         endTime: 22,
         createdBy: "Hasnain Janjua",
-        createdAt: "2026-11-01T16:10:00Z",
+        createdAt: "2026-10-30T16:10:00Z",
         shareToken: "clip-finscale-csm-roi",
         viewCount: 42,
         speakerName: "Sarah Jenkins",
@@ -1309,7 +1385,7 @@ export const INITIAL_MEETINGS: Meeting[] = [
         startTime: 55,
         endTime: 88,
         createdBy: "Hasnain Janjua",
-        createdAt: "2026-11-01T16:12:00Z",
+        createdAt: "2026-10-30T16:12:00Z",
         shareToken: "clip-finscale-25-seats",
         viewCount: 31,
         speakerName: "Raj Patel",
@@ -1317,12 +1393,7 @@ export const INITIAL_MEETINGS: Meeting[] = [
           "Instead of asking an engineer to watch a 55-minute discovery call, our AEs send a 40-second highlight clip of the customer explaining their API topology. We want to add 25 Solutions Engineering seats...",
       },
     ],
-    metrics: {
-      questionsAsked: 6,
-      longestMonologueSeconds: 33,
-      sentimentScore: "positive",
-      engagementScore: 92,
-    },
+    metrics: computeMetricsFromTranscript(meeting3Transcript, 92),
   },
   {
     id: "mtg-eng-architecture",
@@ -1334,8 +1405,8 @@ export const INITIAL_MEETINGS: Meeting[] = [
     scope: "team_calls",
     visibility: "team",
     shareToken: "share-eng-diarization-sync",
-    scheduledAt: "2026-10-31T17:00:00Z",
-    startedAt: "2026-10-31T17:00:05Z",
+    scheduledAt: "2026-10-29T17:00:00Z",
+    startedAt: "2026-10-29T17:00:05Z",
     durationSeconds: 105,
     hostId: "usr-hasnain",
     hostName: "Hasnain Janjua",
@@ -1344,47 +1415,41 @@ export const INITIAL_MEETINGS: Meeting[] = [
     mediaType: "audio",
     isSimulatedCapture: false,
     activeTemplateId: "sprint_sync",
-    participants: [
-      {
-        id: "spk-hasnain",
-        name: "Hasnain Janjua",
-        email: "hasnain@fathom.video",
-        role: "Lead Product Engineer",
-        company: "Fathom AI",
-        isExternal: false,
-        avatarColor: "#6366F1",
-        initials: "HJ",
-        talkTimeSeconds: 46,
-        talkTimePercentage: 44,
-        questionsAsked: 3,
-      },
-      {
-        id: "spk-liam",
-        name: "Liam O'Connor",
-        email: "liam@fathom.video",
-        role: "Senior ML Audio Engineer",
-        company: "Fathom AI",
-        isExternal: false,
-        avatarColor: "#F97316",
-        initials: "LO",
-        talkTimeSeconds: 29,
-        talkTimePercentage: 28,
-        questionsAsked: 1,
-      },
-      {
-        id: "spk-priya",
-        name: "Priya Nair",
-        email: "priya@fathom.video",
-        role: "Staff Backend Engineer",
-        company: "Fathom AI",
-        isExternal: false,
-        avatarColor: "#14B8A6",
-        initials: "PN",
-        talkTimeSeconds: 30,
-        talkTimePercentage: 28,
-        questionsAsked: 1,
-      },
-    ],
+    participants: enrichParticipantsFromTranscript(
+      [
+        {
+          id: "spk-hasnain",
+          name: "Hasnain Janjua",
+          email: "hasnain@fathom.video",
+          role: "Lead Product Engineer",
+          company: "Fathom AI",
+          isExternal: false,
+          avatarColor: "#6366F1",
+          initials: "HJ",
+        },
+        {
+          id: "spk-liam",
+          name: "Liam O'Connor",
+          email: "liam@fathom.video",
+          role: "Senior ML Audio Engineer",
+          company: "Fathom AI",
+          isExternal: false,
+          avatarColor: "#F97316",
+          initials: "LO",
+        },
+        {
+          id: "spk-priya",
+          name: "Priya Nair",
+          email: "priya@fathom.video",
+          role: "Staff Backend Engineer",
+          company: "Fathom AI",
+          isExternal: false,
+          avatarColor: "#14B8A6",
+          initials: "PN",
+        },
+      ],
+      meeting4Transcript
+    ),
     transcript: meeting4Transcript,
     chapters: [
       {
@@ -1456,7 +1521,7 @@ export const INITIAL_MEETINGS: Meeting[] = [
         assigneeName: "Hasnain Janjua",
         assigneeEmail: "hasnain@fathom.video",
         assigneeCompany: "Fathom AI",
-        dueDate: "Today, 4:00 PM",
+        dueDate: "Thu, Oct 29",
         completed: true,
         priority: "medium",
         timestampSeconds: 79,
@@ -1473,7 +1538,7 @@ export const INITIAL_MEETINGS: Meeting[] = [
         startTime: 21,
         endTime: 48,
         createdBy: "Priya Nair",
-        createdAt: "2026-10-31T17:04:00Z",
+        createdAt: "2026-10-29T17:04:00Z",
         shareToken: "clip-eng-3-1-wer",
         viewCount: 16,
         speakerName: "Liam O'Connor",
@@ -1481,12 +1546,7 @@ export const INITIAL_MEETINGS: Meeting[] = [
           "Word error rate dropped to 3.1% after enabling acoustic echo cancellation and per-channel speaker diarization. Even when two participants overlap...",
       },
     ],
-    metrics: {
-      questionsAsked: 5,
-      longestMonologueSeconds: 29,
-      sentimentScore: "positive",
-      engagementScore: 91,
-    },
+    metrics: computeMetricsFromTranscript(meeting4Transcript, 91),
   },
 ];
 
@@ -1549,7 +1609,7 @@ export const INITIAL_WORKSPACE_STATE: WorkspaceState = {
       id: "up-1",
       title: "Vercel Enterprise — Technical Security & SOC2 Deep Dive",
       platform: "zoom",
-      scheduledStart: "Today, 3:00 PM",
+      scheduledStart: "Tue, Nov 3 • 3:00 PM",
       scheduledEnd: "3:45 PM",
       durationMinutes: 45,
       accountName: "Vercel ($140k ARR)",
@@ -1587,7 +1647,7 @@ export const INITIAL_WORKSPACE_STATE: WorkspaceState = {
       id: "up-2",
       title: "Acme Corp — 15-Seat HubSpot Sandbox Pilot Kickoff",
       platform: "google_meet",
-      scheduledStart: "Tomorrow, 10:00 AM",
+      scheduledStart: "Wed, Nov 4 • 10:00 AM",
       scheduledEnd: "10:30 AM",
       durationMinutes: 30,
       accountName: "Acme Corp ($84k ARR)",

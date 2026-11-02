@@ -190,40 +190,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               );
             })}
           </nav>
-
-          {/* Quick Public Share Link Showcase for Evaluators */}
-          <div className="mt-5 px-3">
-            <div className="rounded-xl border border-[#1E2330] bg-[#121621]/90 p-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold text-gray-200 flex items-center gap-1.5">
-                  <ShieldCheck className="h-3.5 w-3.5 text-[#00D4B2]" />
-                  <span>Evaluator Quick Links</span>
-                </span>
-                <span className="rounded bg-[#00D4B2]/10 px-1.5 py-0.5 font-mono text-[9px] text-[#00D4B2]">
-                  Public
-                </span>
-              </div>
-              <p className="mt-1 text-[11px] leading-relaxed text-gray-400">
-                Test unauthenticated share view or onboarding wizard anytime:
-              </p>
-              <div className="mt-2.5 flex flex-col gap-1.5">
-                <Link
-                  href="/share/share-acme-q4-discovery"
-                  className="flex items-center justify-between rounded-lg border border-[#252B3B] bg-[#171C29] px-2.5 py-1.5 text-[11px] font-medium text-indigo-300 hover:border-indigo-500/40 hover:text-white"
-                >
-                  <span>Public Shared Call View</span>
-                  <ExternalLink className="h-3 w-3" />
-                </Link>
-                <button
-                  onClick={() => setOnboardingModalOpen(true)}
-                  className="flex items-center justify-between rounded-lg border border-[#252B3B] bg-[#171C29] px-2.5 py-1.5 text-[11px] font-medium text-gray-300 hover:border-gray-500 hover:text-white"
-                >
-                  <span>Calendar & Onboarding Flow</span>
-                  <Calendar className="h-3 w-3 text-[#00D4B2]" />
-                </button>
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* Bottom User Profile & Demo Mode Controls */}
@@ -249,7 +215,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="mt-2 flex flex-wrap items-center justify-between gap-1.5 px-1">
             <span className="flex items-center gap-1.5 text-[10px] text-emerald-400">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
-              Instant Demo Active
+              Demo Workspace
             </span>
             <div className="flex items-center gap-2">
               {simulatedCount > 0 && (

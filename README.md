@@ -33,7 +33,7 @@ A high-craft, full-stack reconstruction of **Fathom AI** (`fathom.video`) built 
    - Extracted and manual tasks with inline task editing (`title`, `owner`, `dueDate`, `priority`), completion checkboxes, and direct timestamp jump links back to the exact moment in the call.
 7. **Highlights, Clips & Cross-Browser Public Sharing (`/highlights`, `/share/[token]`)**:
    - Create custom highlight clips with category tags (*Customer Pain*, *Key Insight*, *Decision*, *Pricing Objection*, *Feature Request*, *Positive Feedback*).
-   - Every seeded meeting, seeded clip, and **newly created custom clip** generates a portable signed share token (`c1_<fnv1a_sig>_<base64url>` via `src/lib/share-token.ts`) so custom clip links work in any fresh browser, incognito window, or external device without requiring authentication or paid database credentials. Invalid or tampered tokens render an explicit unavailable state.
+   - Every seeded meeting, seeded clip, and **newly created custom clip** generates a server-signed portable share token (`c2_<hmac_sha256_hex>_<base64url>` signed via `/api/share-token` and verified in `src/lib/share-token.ts` using `node:crypto` HMAC-SHA256) so custom clip links work in any fresh browser, incognito window, or external device without requiring authentication or external database credentials. Invalid, tampered, or expired tokens are rejected and render an explicit unavailable state.
 8. **Global Deep Search (`⌘K` / `Ctrl+K` & `/search`)**:
    - Instant search across meeting titles, participants, AI summaries, action items, and verbatim transcript lines.
 9. **Settings, Integrations, Safe Simulation Cleanup & Custom Templates (`/settings`)**:
@@ -48,9 +48,23 @@ A high-craft, full-stack reconstruction of **Fathom AI** (`fathom.video`) built 
 | :--- | :--- | :--- |
 | **Multi-Speaker Speech Audio & Scrubbing** | **Real** | Uses genuine spoken English `.wav` recordings (`public/media/*.wav`) with 3 distinct human TTS voices (`David`, `Zira`, `Mark`) matched to the transcript speakers and timestamps, wired to HTML5 `<audio>` with real-time `timeupdate` synchronization, `-10s/+10s` skip, and `1x–2x` speed control. |
 | **Transcript & Summary Timestamp Sync** | **Real** | Clicking any summary citation, action item timestamp, chapter marker, or transcript utterance seeks the media player to that exact second. |
-| **AI Summary Template Switching** | **Real (Deterministic + Custom Builder)** | All 6 specialized templates (General, MEDDPICC, CS QBR, 1-on-1, User Research, Sprint Sync) dynamically re-render structured notes, decisions, and follow-up emails. |
+| **AI Summary Template Switching** | **Real (Deterministic + Custom Builder)** | All 6 specialized templates (General, MEDDPICC, CS QBR, 1-on-1, User Research, Sprint Sync) dynamically format structured notes, decisions, and follow-up emails grounded directly in each meeting's transcript. |
 | **Live Zoom/Meet Recording Bot** | **Simulated (Clearly Labeled + Safely Removable)** | Per the assignment brief, instead of dialing a headless bot into live Zoom/Meet servers, the **"Simulate Live Call"** modal (`SimulatedLiveCaptureModal`) demonstrates Fathom's in-call floating bar, live transcript streaming, and 1-click live Highlight bookmarking, then saves a playable meeting that can be removed anytime via **"Clean Up Simulated Calls"**. |
-| **Persistence & Public Clip Sharing** | **Hybrid Server API + LocalStorage + Signed Portable Share Tokens** | Workspace mutations persist to `PUT /api/workspace` and client `localStorage` (`fathom_ai_workspace_v1`). Custom highlight clips also embed a signed portable payload (`c1_<sig>_<base64url>`) in their `/share/[token]` URL so newly created clip links resolve and play in any external browser or device across Vercel serverless cold starts. |
+| **Persistence & Public Clip Sharing** | **Server-Signed HMAC-SHA256 Share Tokens + Workspace State** | Workspace mutations persist to `PUT /api/workspace` and client `localStorage` (`fathom_ai_workspace_v1`). Custom highlight clips are signed on the server via `POST /api/share-token` (`c2_<hmac_sha256>_<base64url>`) using `FATHOM_SHARE_SECRET` so newly created clip links resolve and play in any external browser or device across Vercel serverless cold starts while rejecting forged or tampered payloads. |
+
+---
+
+## Environment Variables
+
+Configure the following server-side environment variable in `.env.local` and in your Vercel Project Settings (`Settings -> Environment Variables`):
+
+```bash
+# Required in production for server-side HMAC-SHA256 signing of portable /share/c2_... clip links.
+# Never prefix with NEXT_PUBLIC_ so it remains strictly server-only.
+FATHOM_SHARE_SECRET=replace-with-32-byte-random-hex-secret
+```
+
+See [`.env.example`](file:///d:/MEGAPROJECT/8x-project/.env.example) for details.
 
 ---
 

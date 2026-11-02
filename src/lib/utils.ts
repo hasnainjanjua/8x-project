@@ -30,9 +30,11 @@ export function formatRelativeDate(iso: string): string {
   try {
     const d = new Date(iso);
     return d.toLocaleDateString("en-US", {
+      weekday: "short",
       month: "short",
       day: "numeric",
       year: "numeric",
+      timeZone: "UTC",
     });
   } catch {
     return iso;
@@ -43,10 +45,12 @@ export function formatDateTimeShort(iso: string): string {
   try {
     const d = new Date(iso);
     return d.toLocaleString("en-US", {
+      weekday: "short",
       month: "short",
       day: "numeric",
       hour: "numeric",
       minute: "2-digit",
+      timeZone: "UTC",
     });
   } catch {
     return iso;

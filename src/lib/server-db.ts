@@ -21,9 +21,9 @@ function getDbFilePath(): string {
       fs.mkdirSync(localDir, { recursive: true });
     }
     fs.accessSync(localDir, fs.constants.W_OK);
-    return path.join(localDir, "workspace-db.json");
+    return path.join(localDir, "workspace-db-v3.json");
   } catch {
-    return path.join(os.tmpdir(), "fathom-workspace-db.json");
+    return path.join(os.tmpdir(), "fathom-workspace-db-v3.json");
   }
 }
 

@@ -607,7 +607,10 @@ function MeetingStudioInner() {
                   }`}
                 >
                   <CheckSquare className="h-3.5 w-3.5" />
-                  <span>Action Items ({meeting.actionItems.length})</span>
+                  <span>
+                    Action Items ({meeting.actionItems.filter((a) => !a.completed).length} open /{" "}
+                    {meeting.actionItems.length})
+                  </span>
                 </button>
 
                 <button
@@ -655,10 +658,10 @@ function MeetingStudioInner() {
                 <div className="flex flex-col justify-between gap-3 rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-3.5 sm:flex-row sm:items-center">
                   <div>
                     <span className="text-[11px] font-semibold uppercase tracking-wider text-[#00D4B2]">
-                      AI Summary Template Framework
+                      Summary Template View
                     </span>
                     <p className="text-xs text-gray-300">
-                      Switch templates anytime to re-structure notes for Sales (MEDDPICC), CS, Product, or Engineering
+                      Switch template formats to organize captured transcript notes for Sales (MEDDPICC), CS, Product, or Engineering
                     </p>
                   </div>
                   <select

@@ -34,23 +34,30 @@ export default function DashboardPage() {
   const simulatedMeetingsCount = state.meetings.filter(
     (m) => m.isSimulatedCapture || m.id.startsWith("mtg-sim-")
   ).length;
+  const externalCustomerMeetingsCount = state.meetings.filter((m) =>
+    m.participants.some((p) => p.isExternal)
+  ).length;
   const allActionItems = state.meetings.flatMap((m) => m.actionItems);
   const completedTasks = allActionItems.filter((a) => a.completed).length;
+  const openTasksCount = allActionItems.length - completedTasks;
+  const priorityActionItems = [...allActionItems].sort(
+    (a, b) => Number(a.completed) - Number(b.completed)
+  );
   const allHighlights = state.meetings.flatMap((m) => m.highlights);
-  const crmHoursSaved = ((totalMeetings * 22) / 60).toFixed(1);
+  const totalMinutesSaved = totalMeetings * 22;
 
   return (
     <div className="mx-auto max-w-7xl p-5 md:p-7 space-y-7">
-      {/* Top Hero Banner with Instant Demo Context */}
+      {/* Top Hero Banner */}
       <div className="flex flex-col justify-between gap-4 rounded-2xl border border-[#22283A] bg-gradient-to-r from-[#121623] via-[#141A2B] to-[#111927] p-6 lg:flex-row lg:items-center">
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-[#00D4B2]/15 px-2.5 py-0.5 text-[11px] font-semibold text-[#00D4B2] border border-[#00D4B2]/30">
               <Sparkles className="h-3 w-3" />
-              Instant Evaluator Demo Workspace
+              Fathom AI • Demo Workspace
             </span>
             <span className="rounded-full bg-indigo-500/15 px-2.5 py-0.5 font-mono text-[11px] text-indigo-300 border border-indigo-500/30">
-              Real Playable WAV Audio + 6 AI Templates
+              Sample Recordings & Synchronized Transcripts
             </span>
           </div>
           <h1 className="mt-2.5 text-2xl font-bold tracking-tight text-white md:text-3xl">
@@ -105,25 +112,23 @@ export default function DashboardPage() {
 
         <div className="rounded-2xl border border-[#1E2330] bg-[#111520] p-4">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-gray-400">CRM & Post-Call Time Saved</span>
+            <span className="text-xs font-medium text-gray-400">Post-Call Admin Time Saved</span>
             <Clock className="h-4 w-4 text-[#00D4B2]" />
           </div>
-          <p className="mt-2 font-mono text-2xl font-bold text-white">{crmHoursSaved} hrs</p>
+          <p className="mt-2 font-mono text-2xl font-bold text-white">{totalMinutesSaved} mins</p>
           <p className="mt-1 text-[11px] text-gray-400">
-            22 mins saved per call ({totalMeetings} calls synced)
+            22 mins/call ({externalCustomerMeetingsCount} external CRM calls, {totalMeetings} total)
           </p>
         </div>
 
         <div className="rounded-2xl border border-[#1E2330] bg-[#111520] p-4">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-gray-400">Action Items Tracked</span>
+            <span className="text-xs font-medium text-gray-400">Open Action Items</span>
             <CheckCircle2 className="h-4 w-4 text-amber-400" />
           </div>
-          <p className="mt-2 font-mono text-2xl font-bold text-white">
-            {completedTasks} / {allActionItems.length}
-          </p>
+          <p className="mt-2 font-mono text-2xl font-bold text-white">{openTasksCount}</p>
           <p className="mt-1 text-[11px] text-gray-400">
-            {allActionItems.length - completedTasks} open follow-ups assigned
+            {completedTasks} completed of {allActionItems.length} total tasks
           </p>
         </div>
 
@@ -269,7 +274,7 @@ export default function DashboardPage() {
                         {mtg.highlights.length} clips
                       </span>
                       <span className="text-amber-300">
-                        {mtg.actionItems.filter((a) => !a.completed).length} open tasks
+                        {mtg.actionItems.filter((a) => !a.completed).length} open / {mtg.actionItems.length} tasks
                       </span>
                     </div>
                   </div>
@@ -342,7 +347,7 @@ export default function DashboardPage() {
               </Link>
             </div>
             <div className="space-y-2">
-              {allActionItems.slice(0, 4).map((item) => (
+              {priorityActionItems.slice(0, 4).map((item) => (
                 <div
                   key={item.id}
                   className="flex items-start gap-2.5 rounded-xl border border-[#1D2231] bg-[#0D1017] p-2.5"

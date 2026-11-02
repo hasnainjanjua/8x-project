@@ -300,7 +300,7 @@ export default function MeetingsLibraryPage() {
                     </span>
                     <span className="flex items-center gap-1 text-amber-300">
                       <CheckSquare className="h-3 w-3" />
-                      {mtg.actionItems.length} Action Items
+                      {mtg.actionItems.filter((a) => !a.completed).length} Open / {mtg.actionItems.length} Tasks
                     </span>
                   </div>
                 </div>

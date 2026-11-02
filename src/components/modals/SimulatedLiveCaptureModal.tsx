@@ -15,7 +15,6 @@ import {
 import { useWorkspace } from "@/context/WorkspaceContext";
 import { HighlightTag, Meeting, SummaryTemplateId } from "@/types/fathom";
 import { SUMMARY_TEMPLATES_META } from "@/data/seed-meetings";
-import { encodePortableClipToken } from "@/lib/share-token";
 import { formatTimestamp } from "@/lib/utils";
 
 const LIVE_STREAM_SCRIPT = [
@@ -25,7 +24,7 @@ const LIVE_STREAM_SCRIPT = [
     speakerRole: "Lead Product Engineer",
     speakerColor: "#6366F1",
     isExternal: false,
-    text: "Welcome to our live technical evaluation session. We're testing Fathom's real-time highlight bookmarking and post-call AI summary generation.",
+    text: "Welcome to our live technical evaluation session. How is your engineering team currently handling post-call architecture notes and action item handoffs?",
   },
   {
     speakerId: "spk-prospect",
@@ -49,7 +48,7 @@ const LIVE_STREAM_SCRIPT = [
     speakerRole: "VP of Engineering, CloudNova",
     speakerColor: "#00D4B2",
     isExternal: true,
-    text: "That solves our sprint handoff bottleneck. Let's move forward with a 30-seat engineering trial starting Monday and sync action items to Linear.",
+    text: "That solves our sprint handoff bottleneck. Can we move forward with a 30-seat engineering trial starting Monday and sync action items to Linear?",
   },
 ];
 
@@ -97,7 +96,7 @@ export function SimulatedLiveCaptureModal() {
     ]);
   };
 
-  const handleCompleteAndProcess = () => {
+  const handleCompleteAndProcess = async () => {
     setIsRecording(false);
     const newId = `mtg-sim-${Date.now()}`;
     const segments = LIVE_STREAM_SCRIPT.map((line, idx) => ({
@@ -109,9 +108,17 @@ export function SimulatedLiveCaptureModal() {
       speakerColor: line.speakerColor,
       isExternal: line.isExternal,
       startTime: idx * 25,
-      endTime: (idx + 1) * 25 - 1,
+      endTime: (idx + 1) * 25,
       text: line.text,
     }));
+
+    const countQuestions = (spkId: string) =>
+      segments
+        .filter((s) => s.speakerId === spkId)
+        .reduce((acc, s) => acc + (s.text.match(/\?/g) || []).length, 0);
+
+    const hasnainQs = countQuestions("spk-hasnain");
+    const prospectQs = countQuestions("spk-prospect");
 
     const baseSummary = {
       tldr: `Simulated Live Capture for ${meetingTitle}: Validated real-time highlight bookmarking and agreed to launch a 30-seat CloudNova engineering trial starting Monday with Linear action item sync.`,
@@ -161,10 +168,102 @@ export function SimulatedLiveCaptureModal() {
       return acc;
     }, {} as Meeting["summariesByTemplate"]);
 
+    const signClipServerSide = async (params: {
+      title: string;
+      tag: HighlightTag;
+      startTime: number;
+      endTime: number;
+      speakerName: string;
+      transcriptExcerpt: string;
+    }): Promise<string> => {
+      try {
+        const res = await fetch("/api/share-token", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            meetingId: "mtg-eng-architecture",
+            title: params.title,
+            tag: params.tag,
+            startTime: params.startTime,
+            endTime: params.endTime,
+            speakerName: params.speakerName,
+            transcriptExcerpt: params.transcriptExcerpt,
+            createdBy: "Hasnain Janjua",
+          }),
+        });
+        const data = await res.json();
+        if (data?.ok && typeof data.token === "string") {
+          return data.token;
+        }
+      } catch {
+        // Fallback to local clip id if offline
+      }
+      return `${newId}-clip-local`;
+    };
+
+    const resolvedHighlights =
+      liveHighlights.length > 0
+        ? await Promise.all(
+            liveHighlights.map(async (lh, idx) => {
+              const startSec = Math.max(0, Math.min(80, lh.timestamp - 5));
+              const endSec = Math.min(105, startSec + 25);
+              const title = `Live Highlight: ${lh.tag}`;
+              const shareToken = await signClipServerSide({
+                title,
+                tag: lh.tag,
+                startTime: startSec,
+                endTime: endSec,
+                speakerName: "Jordan Taylor",
+                transcriptExcerpt: lh.note,
+              });
+              return {
+                id: `${newId}-clip-${idx}`,
+                meetingId: newId,
+                meetingTitle,
+                title,
+                tag: lh.tag,
+                startTime: startSec,
+                endTime: endSec,
+                createdBy: "Hasnain Janjua",
+                createdAt: new Date().toISOString(),
+                shareToken,
+                viewCount: 1,
+                speakerName: "Jordan Taylor",
+                transcriptExcerpt: lh.note,
+              };
+            })
+          )
+        : [
+            {
+              id: `${newId}-clip-default`,
+              meetingId: newId,
+              meetingTitle,
+              title: "30-Seat Engineering Trial Commitment",
+              tag: "Decision" as HighlightTag,
+              startTime: 50,
+              endTime: 90,
+              createdBy: "Hasnain Janjua",
+              createdAt: new Date().toISOString(),
+              shareToken: await signClipServerSide({
+                title: "30-Seat Engineering Trial Commitment",
+                tag: "Decision",
+                startTime: 50,
+                endTime: 90,
+                speakerName: "Jordan Taylor",
+                transcriptExcerpt:
+                  "That solves our sprint handoff bottleneck. Can we move forward with a 30-seat engineering trial starting Monday and sync action items to Linear?",
+              }),
+              viewCount: 1,
+              speakerName: "Jordan Taylor",
+              transcriptExcerpt:
+                "That solves our sprint handoff bottleneck. Can we move forward with a 30-seat engineering trial starting Monday and sync action items to Linear?",
+            },
+          ];
+
     const newMeeting: Meeting = {
       id: newId,
       title: meetingTitle,
-      subtitle: "Simulated Live Call Capture • Processed with Real Audio Sample",
+      subtitle: "Simulated Live Call Capture • Paired with Sample Audio",
       category: "sales_discovery",
       platform,
       status: "completed",
@@ -193,9 +292,9 @@ export function SimulatedLiveCaptureModal() {
           isExternal: false,
           avatarColor: "#6366F1",
           initials: "HJ",
-          talkTimeSeconds: 52,
+          talkTimeSeconds: 50,
           talkTimePercentage: 50,
-          questionsAsked: 3,
+          questionsAsked: hasnainQs,
         },
         {
           id: "spk-prospect",
@@ -206,9 +305,9 @@ export function SimulatedLiveCaptureModal() {
           isExternal: true,
           avatarColor: "#00D4B2",
           initials: "JT",
-          talkTimeSeconds: 53,
+          talkTimeSeconds: 50,
           talkTimePercentage: 50,
-          questionsAsked: 2,
+          questionsAsked: prospectQs,
         },
       ],
       transcript: segments,
@@ -223,8 +322,8 @@ export function SimulatedLiveCaptureModal() {
         {
           id: `${newId}-ch2`,
           title: "30-Seat Engineering Trial Commitment",
-          startTime: 51,
-          endTime: 105,
+          startTime: 50,
+          endTime: 100,
           summary: "Confirmed Monday launch for 30-seat trial with Linear sync.",
         },
       ],
@@ -239,73 +338,16 @@ export function SimulatedLiveCaptureModal() {
           assigneeName: "Hasnain Janjua",
           assigneeEmail: "hasnain@fathom.video",
           assigneeCompany: "Fathom AI",
-          dueDate: "Monday, 9:00 AM",
+          dueDate: "Mon, Nov 9",
           completed: false,
           priority: "high",
           timestampSeconds: 75,
           syncedTo: ["linear", "slack"],
         },
       ],
-      highlights:
-        liveHighlights.length > 0
-          ? liveHighlights.map((lh, idx) => {
-              const startSec = Math.max(0, lh.timestamp - 5);
-              const endSec = lh.timestamp + 20;
-              return {
-                id: `${newId}-clip-${idx}`,
-                meetingId: newId,
-                meetingTitle,
-                title: `Live Highlight: ${lh.tag}`,
-                tag: lh.tag,
-                startTime: startSec,
-                endTime: endSec,
-                createdBy: "Hasnain Janjua",
-                createdAt: new Date().toISOString(),
-                shareToken: encodePortableClipToken({
-                  meetingId: "mtg-eng-architecture",
-                  title: `Live Highlight: ${lh.tag}`,
-                  tag: lh.tag,
-                  startTime: startSec,
-                  endTime: endSec,
-                  speakerName: "Jordan Taylor",
-                  transcriptExcerpt: lh.note,
-                  createdBy: "Hasnain Janjua",
-                }),
-                viewCount: 1,
-                speakerName: "Jordan Taylor",
-                transcriptExcerpt: lh.note,
-              };
-            })
-          : [
-              {
-                id: `${newId}-clip-default`,
-                meetingId: newId,
-                meetingTitle,
-                title: "30-Seat Engineering Trial Commitment",
-                tag: "Decision",
-                startTime: 50,
-                endTime: 90,
-                createdBy: "Hasnain Janjua",
-                createdAt: new Date().toISOString(),
-                shareToken: encodePortableClipToken({
-                  meetingId: "mtg-eng-architecture",
-                  title: "30-Seat Engineering Trial Commitment",
-                  tag: "Decision",
-                  startTime: 50,
-                  endTime: 90,
-                  speakerName: "Jordan Taylor",
-                  transcriptExcerpt:
-                    "Let's move forward with a 30-seat engineering trial starting Monday and sync action items to Linear.",
-                  createdBy: "Hasnain Janjua",
-                }),
-                viewCount: 1,
-                speakerName: "Jordan Taylor",
-                transcriptExcerpt:
-                  "Let's move forward with a 30-seat engineering trial starting Monday and sync action items to Linear.",
-              },
-            ],
+      highlights: resolvedHighlights,
       metrics: {
-        questionsAsked: 5,
+        questionsAsked: hasnainQs + prospectQs,
         longestMonologueSeconds: 25,
         sentimentScore: "positive",
         engagementScore: 95,
@@ -350,11 +392,11 @@ export function SimulatedLiveCaptureModal() {
           </button>
         </div>
 
-        {/* Transparent Disclosure Banner (Required by 8x Brief) */}
+        {/* Transparent Disclosure Banner */}
         <div className="border-b border-amber-500/20 bg-amber-500/10 px-5 py-2.5 flex items-start gap-2.5">
           <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
           <p className="text-[11px] leading-relaxed text-amber-200">
-            <strong>Transparency Note:</strong> Instead of dialing a live headless bot into Zoom/Meet, this simulator demonstrates Fathom’s live in-call highlight workflow and pairs the resulting call with a real playable WAV audio sample.
+            <strong>Simulation Notice:</strong> Live meeting capture is simulated in-browser to demonstrate Fathom’s real-time highlight bookmarking workflow and pairs the resulting session with a sample audio recording.
           </p>
         </div>
 

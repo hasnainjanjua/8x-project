@@ -4,9 +4,9 @@ import { WorkspaceProvider } from "@/context/WorkspaceContext";
 import { AppShell } from "@/components/layout/AppShell";
 
 export const metadata: Metadata = {
-  title: "Fathom AI — Meeting Intelligence, Synchronized Transcripts & Clips",
+  title: "Dashboard — Fathom AI Meeting Intelligence",
   description:
-    "Record, transcribe, summarize, and share key moments from your customer and team calls with Fathom AI.",
+    "Review recorded calls, upcoming calendar auto-join rules, open action items, and workspace activity in Fathom AI.",
 };
 
 export default function RootLayout({

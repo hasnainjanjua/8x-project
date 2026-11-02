@@ -64,25 +64,25 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {/* Primary Evaluator 1-Click Instant Demo Access */}
+        {/* Primary 1-Click Interactive Demo Workspace Access */}
         <div className="rounded-xl border border-[#00D4B2]/40 bg-[#00D4B2]/10 p-4 space-y-2.5">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-[#00D4B2] flex items-center gap-1.5">
               <ShieldCheck className="h-4 w-4" />
-              <span>Recommended for 8x Evaluators</span>
+              <span>Interactive Demo Workspace</span>
             </span>
             <span className="rounded bg-[#00D4B2]/20 px-2 py-0.5 font-mono text-[10px] font-bold text-[#00D4B2]">
-              ZERO FRICTION
+              INSTANT ACCESS
             </span>
           </div>
           <p className="text-xs text-gray-200 leading-relaxed">
-            Jump straight into the pre-seeded Enterprise workspace with 4 recorded calls, real WAV audio playback, 6 AI summary templates, and public share links.
+            Explore the pre-populated demonstration workspace with sample call recordings, synchronized transcripts, summary templates, and shareable highlight clips.
           </p>
           <button
             onClick={handleEnterInstantDemo}
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#00D4B2] py-2.5 text-xs font-bold text-slate-950 shadow-lg hover:bg-[#00e6c2] transition"
           >
-            <span>Instant Demo Access (No Login Required)</span>
+            <span>Enter Demo Workspace (No Login Required)</span>
             <ArrowRight className="h-4 w-4" />
           </button>
         </div>
