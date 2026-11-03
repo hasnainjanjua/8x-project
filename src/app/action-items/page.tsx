@@ -126,7 +126,7 @@ export default function ActionItemsPage() {
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
             placeholder="Describe commitment or follow-up task..."
-            className="md:col-span-5 rounded-xl border border-[#252B3D] bg-[#0D1017] px-3.5 py-2 text-xs text-white placeholder-gray-500 focus:border-indigo-500 focus:outline-none"
+            className="md:col-span-4 rounded-xl border border-[#252B3D] bg-[#0D1017] px-3.5 py-2 text-xs text-white placeholder-gray-500 focus:border-indigo-500 focus:outline-none"
           />
           <select
             value={selectedMeetingId}
@@ -146,12 +146,30 @@ export default function ActionItemsPage() {
             placeholder="Owner name"
             className="md:col-span-2 rounded-xl border border-[#252B3D] bg-[#0D1017] px-2.5 py-2 text-xs text-white"
           />
+          <input
+            type="text"
+            value={newDue}
+            onChange={(e) => setNewDue(e.target.value)}
+            placeholder="Due date (e.g. Friday)"
+            aria-label="Action item due date"
+            className="md:col-span-1 rounded-xl border border-[#252B3D] bg-[#0D1017] px-2.5 py-2 text-xs text-white placeholder-gray-500 focus:border-indigo-500 focus:outline-none"
+          />
+          <select
+            value={newPriority}
+            onChange={(e) => setNewPriority(e.target.value as "high" | "medium" | "low")}
+            aria-label="Action item priority"
+            className="md:col-span-1 rounded-xl border border-[#252B3D] bg-[#0D1017] px-2 py-2 text-xs text-gray-200"
+          >
+            <option value="high">High</option>
+            <option value="medium">Med</option>
+            <option value="low">Low</option>
+          </select>
           <button
             type="submit"
-            className="md:col-span-2 flex items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-500"
+            className="md:col-span-1 flex items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-500"
           >
             <Plus className="h-3.5 w-3.5" />
-            <span>Add Task</span>
+            <span>Add</span>
           </button>
         </div>
       </form>

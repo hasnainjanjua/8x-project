@@ -1,10 +1,19 @@
-export type SummaryTemplateId =
+export type BuiltInSummaryTemplateId =
   | "general"
   | "meddpicc"
   | "customer_success"
   | "one_on_one"
   | "user_research"
   | "sprint_sync";
+
+export type SummaryTemplateId = BuiltInSummaryTemplateId | (string & {});
+
+export interface CustomSummaryTemplate {
+  id: string;
+  name: string;
+  promptInstructions: string;
+  sections: string[];
+}
 
 export type MeetingCategory =
   | "sales_discovery"
@@ -231,10 +240,5 @@ export interface WorkspaceState {
   meetings: Meeting[];
   upcomingEvents: UpcomingCalendarEvent[];
   activities: ActivityEvent[];
-  customTemplates: {
-    id: string;
-    name: string;
-    promptInstructions: string;
-    sections: string[];
-  }[];
+  customTemplates: CustomSummaryTemplate[];
 }

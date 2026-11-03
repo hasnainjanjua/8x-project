@@ -1,4 +1,5 @@
 import { INITIAL_MEETINGS, SUMMARY_TEMPLATES_META } from "@/data/seed-meetings";
+import { readServerWorkspace } from "@/lib/server-db";
 import { verifyPortableClipToken } from "@/lib/share-token";
 import type { HighlightClip, HighlightTag, Meeting, TranscriptSegment } from "@/types/fathom";
 
@@ -209,14 +210,29 @@ const SIMULATED_CLOUDNOVA_MEETING: Meeting = {
 };
 
 function getAllCanonicalMeetings(): Meeting[] {
+  try {
+    const serverState = readServerWorkspace();
+    if (serverState && Array.isArray(serverState.meetings) && serverState.meetings.length > 0) {
+      // Merge server meetings with canonical defaults so existing seeded meetings retain fallback stability
+      const map = new Map<string, Meeting>();
+      for (const m of INITIAL_MEETINGS) map.set(m.id, m);
+      map.set(SIMULATED_CLOUDNOVA_MEETING.id, SIMULATED_CLOUDNOVA_MEETING);
+      for (const m of serverState.meetings) map.set(m.id, m);
+      return Array.from(map.values());
+    }
+  } catch {
+    // ignore server-db read errors and use static fallback
+  }
   return [...INITIAL_MEETINGS, SIMULATED_CLOUDNOVA_MEETING];
 }
 
 function findCanonicalMeetingById(meetingId: string): Meeting | null {
+  const all = getAllCanonicalMeetings();
   if (meetingId.startsWith("mtg-sim-")) {
-    return SIMULATED_CLOUDNOVA_MEETING;
+    const matchedSim = all.find((m) => m.id === meetingId || m.id === "mtg-cloudnova-sim");
+    return matchedSim || SIMULATED_CLOUDNOVA_MEETING;
   }
-  return getAllCanonicalMeetings().find((m) => m.id === meetingId) || null;
+  return all.find((m) => m.id === meetingId) || null;
 }
 
 function buildPublicClipShareView(

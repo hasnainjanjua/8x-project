@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { useWorkspace } from "@/context/WorkspaceContext";
 import { SUMMARY_TEMPLATES_META } from "@/data/seed-meetings";
+import { resolveMeetingSummary } from "@/lib/custom-template-summary";
 import { HighlightTag, SummaryTemplateId } from "@/types/fathom";
 import { formatDurationHuman, formatRelativeDate, formatTimestamp } from "@/lib/utils";
 
@@ -110,6 +111,18 @@ function MeetingStudioInner() {
     },
   ]);
 
+  // Reset Ask Fathom chat & default task owner when switching between meetings
+  useEffect(() => {
+    if (!meeting) return;
+    setNewTaskOwner(meeting.participants[0]?.name || "Hasnain Janjua");
+    setChatHistory([
+      {
+        role: "assistant",
+        text: `Ask Fathom anything about "${meeting.title}". Every answer is grounded directly in the recorded transcript with clickable timestamps.`,
+      },
+    ]);
+  }, [meeting?.id, meeting?.title]);
+
   // Seek to ?t= query parameter on mount or change
   useEffect(() => {
     if (initialTimeParam > 0 && audioRef.current) {
@@ -129,9 +142,7 @@ function MeetingStudioInner() {
     );
   }
 
-  const activeSummary =
-    meeting.summariesByTemplate[meeting.activeTemplateId] ||
-    meeting.summariesByTemplate.general;
+  const activeSummary = resolveMeetingSummary(meeting, state.customTemplates);
 
   // Determine currently active transcript utterance from currentTime
   // If currentTime is in a 1-second pause between utterances, hold on the preceding utterance
@@ -184,9 +195,27 @@ function MeetingStudioInner() {
     setClipCreatorOpen(true);
   };
 
+  const clipRangeError =
+    !Number.isFinite(clipStart) ||
+    !Number.isFinite(clipEnd) ||
+    clipStart < 0 ||
+    clipEnd <= clipStart ||
+    clipEnd > meeting.durationSeconds
+      ? `Clip range must satisfy 0s <= Start (${clipStart}s) < End (${clipEnd}s) <= ${meeting.durationSeconds}s.`
+      : null;
+
   const updateClipRangeAndExcerpt = (nextStart: number, nextEnd: number) => {
     setClipStart(nextStart);
     setClipEnd(nextEnd);
+    if (
+      !Number.isFinite(nextStart) ||
+      !Number.isFinite(nextEnd) ||
+      nextStart < 0 ||
+      nextEnd <= nextStart ||
+      nextEnd > meeting.durationSeconds
+    ) {
+      return;
+    }
     const overlapping = meeting.transcript.filter(
       (seg) => seg.endTime > nextStart && seg.startTime < nextEnd
     );
@@ -197,7 +226,14 @@ function MeetingStudioInner() {
   };
 
   const handleSaveClip = async () => {
-    if (!clipTitle.trim()) return;
+    if (!clipTitle.trim()) {
+      showToast("Please enter a title for the highlight clip.");
+      return;
+    }
+    if (clipRangeError) {
+      showToast(clipRangeError);
+      return;
+    }
     const created = await createHighlightClip(meeting.id, {
       title: clipTitle.trim(),
       tag: clipTag,
@@ -247,12 +283,43 @@ function MeetingStudioInner() {
 
     let answer = "";
     let citedSeg = matchedSeg;
-    if (lower.includes("budget") || lower.includes("price") || lower.includes("cost") || lower.includes("arr")) {
-      answer = `Based on the call with ${meeting.accountName || "the team"}, ${
-        matchedSeg.speakerName
-      } confirmed ${
-        meeting.dealValue || "$84,000 in approved Q4 budget"
-      } contingent on pilot validation and security sign-off: "${matchedSeg.text}"`;
+    if (
+      lower.includes("budget") ||
+      lower.includes("price") ||
+      lower.includes("cost") ||
+      lower.includes("arr") ||
+      lower.includes("timeline")
+    ) {
+      const budgetOrTimelineSeg =
+        meeting.transcript.find((s) => {
+          const t = s.text.toLowerCase();
+          return (
+            t.includes("$") ||
+            t.includes("budget") ||
+            t.includes("arr") ||
+            t.includes("seat") ||
+            t.includes("november") ||
+            t.includes("friday") ||
+            t.includes("monday") ||
+            t.includes("today")
+          );
+        }) || matchedSeg;
+      citedSeg = budgetOrTimelineSeg;
+      const primaryDecision = activeSummary.keyDecisions[0];
+
+      if (meeting.dealValue) {
+        answer = `In "${meeting.title}" (${meeting.accountName || "Account"} • ${meeting.dealValue}), ${
+          budgetOrTimelineSeg.speakerName
+        } stated at ${formatTimestamp(budgetOrTimelineSeg.startTime)}: "${
+          budgetOrTimelineSeg.text
+        }"${primaryDecision ? ` Agreed decision: ${primaryDecision.decision}` : ""}`;
+      } else {
+        answer = `No commercial deal budget is attached to "${meeting.title}". Regarding scope and timeline, ${
+          budgetOrTimelineSeg.speakerName
+        } stated at ${formatTimestamp(budgetOrTimelineSeg.startTime)}: "${
+          budgetOrTimelineSeg.text
+        }"${primaryDecision ? ` Key decision: ${primaryDecision.decision}` : ""}`;
+      }
     } else if (lower.includes("security") || lower.includes("soc2") || lower.includes("risk") || lower.includes("objection")) {
       const secSeg =
         meeting.transcript.find(
@@ -697,6 +764,11 @@ function MeetingStudioInner() {
                         {tpl.name} ({tpl.badge})
                       </option>
                     ))}
+                    {state.customTemplates.map((ct) => (
+                      <option key={ct.id} value={ct.id}>
+                        {ct.name} (Custom AI)
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -812,6 +884,14 @@ function MeetingStudioInner() {
                       </option>
                     ))}
                   </select>
+                  <input
+                    type="text"
+                    value={newTaskDue}
+                    onChange={(e) => setNewTaskDue(e.target.value)}
+                    placeholder="Due date (e.g. Friday)"
+                    aria-label="Action item due date"
+                    className="w-full sm:w-32 rounded-lg border border-[#252B3D] bg-[#141824] px-2.5 py-1.5 text-xs text-white placeholder-gray-500 focus:border-indigo-500 focus:outline-none"
+                  />
                   <select
                     value={newTaskPriority}
                     onChange={(e) =>
@@ -829,7 +909,7 @@ function MeetingStudioInner() {
                       addActionItem(meeting.id, {
                         title: newTaskTitle.trim(),
                         assigneeName: newTaskOwner,
-                        dueDate: newTaskDue,
+                        dueDate: newTaskDue.trim() || "Friday",
                         priority: newTaskPriority,
                         timestampSeconds: Math.floor(currentTime),
                       });
@@ -1400,6 +1480,12 @@ function MeetingStudioInner() {
                   />
                 </div>
               </div>
+
+              {clipRangeError && (
+                <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
+                  {clipRangeError}
+                </div>
+              )}
 
               <div className="rounded-lg border border-[#1E2330] bg-[#0D1017] p-3 text-xs text-gray-300">
                 “{clipExcerpt}”

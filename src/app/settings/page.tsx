@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   User,
   Sliders,
@@ -37,6 +37,21 @@ export default function SettingsPage() {
   );
   const [confirmFullReset, setConfirmFullReset] = useState(false);
 
+  // Sync local form inputs whenever workspace state hydrates or resets
+  useEffect(() => {
+    setName(state.user.name);
+    setEmail(state.user.email);
+    setRole(state.user.role);
+    setWorkspaceName(state.user.workspaceName);
+    setCustomAiPrompt(state.user.preferences.customAiInstructions);
+  }, [
+    state.user.name,
+    state.user.email,
+    state.user.role,
+    state.user.workspaceName,
+    state.user.preferences.customAiInstructions,
+  ]);
+
   const simulatedCount = state.meetings.filter(
     (m) => m.isSimulatedCapture || m.id.startsWith("mtg-sim-")
   ).length;
@@ -44,6 +59,9 @@ export default function SettingsPage() {
   // Custom Template Builder
   const [newTplName, setNewTplName] = useState("");
   const [newTplInstructions, setNewTplInstructions] = useState("");
+  const [newTplSections, setNewTplSections] = useState(
+    "Executive Summary, Competitor Mentions, Next Steps"
+  );
 
   return (
     <div className="mx-auto max-w-5xl p-5 md:p-7 space-y-6">
@@ -233,6 +251,11 @@ export default function SettingsPage() {
                   {t.name} ({t.badge})
                 </option>
               ))}
+              {state.customTemplates.map((ct) => (
+                <option key={ct.id} value={ct.id}>
+                  {ct.name} (Custom AI)
+                </option>
+              ))}
             </select>
           </div>
 
@@ -279,7 +302,7 @@ export default function SettingsPage() {
           <h2 className="text-sm font-bold text-white">Custom AI Template Builder</h2>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
           <input
             type="text"
             value={newTplName}
@@ -294,13 +317,27 @@ export default function SettingsPage() {
             placeholder="Custom prompt instructions (e.g. Extract competitor mentions)"
             className="rounded-xl border border-[#252B3D] bg-[#0D1017] px-3 py-2 text-xs text-white"
           />
+          <input
+            type="text"
+            value={newTplSections}
+            onChange={(e) => setNewTplSections(e.target.value)}
+            placeholder="Sections (comma-separated)"
+            aria-label="Custom Template Sections"
+            className="rounded-xl border border-[#252B3D] bg-[#0D1017] px-3 py-2 text-xs text-white"
+          />
           <button
             onClick={() => {
               if (!newTplName.trim()) return;
+              const parsedSections = newTplSections
+                .split(",")
+                .map((s) => s.trim())
+                .filter(Boolean);
               addCustomTemplate(
                 newTplName.trim(),
                 newTplInstructions.trim() || "Extract key points and decisions",
-                ["Executive Summary", "Competitor Mentions", "Next Steps"]
+                parsedSections.length > 0
+                  ? parsedSections
+                  : ["Executive Summary", "Competitor Mentions", "Next Steps"]
               );
               setNewTplName("");
               setNewTplInstructions("");
@@ -317,10 +354,27 @@ export default function SettingsPage() {
             {state.customTemplates.map((ct) => (
               <div
                 key={ct.id}
-                className="rounded-xl border border-[#23293A] bg-[#0D1017] p-3 text-xs"
+                className="rounded-xl border border-[#23293A] bg-[#0D1017] p-3 text-xs space-y-1.5"
               >
-                <p className="font-bold text-white">{ct.name}</p>
-                <p className="text-gray-400 mt-0.5">{ct.promptInstructions}</p>
+                <div className="flex items-center justify-between">
+                  <p className="font-bold text-white">{ct.name}</p>
+                  <span className="rounded bg-indigo-500/15 px-2 py-0.5 font-mono text-[10px] text-indigo-300">
+                    Custom AI
+                  </span>
+                </div>
+                <p className="text-gray-400">{ct.promptInstructions}</p>
+                {ct.sections?.length > 0 && (
+                  <div className="flex flex-wrap gap-1 pt-1">
+                    {ct.sections.map((sec, idx) => (
+                      <span
+                        key={idx}
+                        className="rounded bg-[#181E2E] px-2 py-0.5 font-mono text-[10px] text-[#00D4B2]"
+                      >
+                        {sec}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>

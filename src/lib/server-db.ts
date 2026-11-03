@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import { INITIAL_WORKSPACE_STATE } from "@/data/seed-meetings";
-import { WorkspaceState } from "@/types/fathom";
+import type { WorkspaceState } from "@/types/fathom";
 
 // Hybrid Server Persistence Layer:
 // 1. In local development or writable Node runtimes, persists to `.data/workspace-db.json`

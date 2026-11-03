@@ -96,17 +96,51 @@ function DeepSearchInner() {
         }
       }
 
-      const activeSum = m.summariesByTemplate[m.activeTemplateId];
-      for (const sec of activeSum?.sections || []) {
-        for (const item of sec.items) {
-          if (speakerFilter !== "all" && item.speakerName !== speakerFilter) continue;
-          if (!q || item.text.toLowerCase().includes(q) || m.title.toLowerCase().includes(q)) {
+      const activeSum = m.summariesByTemplate[m.activeTemplateId] || m.summariesByTemplate.general;
+      if (activeSum) {
+        // Match TLDR when no speaker filter is active or if query matches
+        if (
+          speakerFilter === "all" &&
+          (!q || activeSum.tldr.toLowerCase().includes(q) || m.title.toLowerCase().includes(q))
+        ) {
+          summaryMatches.push({
+            meetingId: m.id,
+            meetingTitle: m.title,
+            templateName: activeSum.templateName,
+            text: activeSum.tldr,
+          });
+        }
+
+        // Match structured summary sections
+        for (const sec of activeSum.sections || []) {
+          for (const item of sec.items) {
+            if (speakerFilter !== "all" && item.speakerName && item.speakerName !== speakerFilter) {
+              continue;
+            }
+            if (!q || item.text.toLowerCase().includes(q) || m.title.toLowerCase().includes(q)) {
+              summaryMatches.push({
+                meetingId: m.id,
+                meetingTitle: m.title,
+                templateName: activeSum.templateName,
+                text: item.text,
+                timestampSeconds: item.timestampSeconds,
+              });
+            }
+          }
+        }
+
+        // Match key decisions
+        for (const dec of activeSum.keyDecisions || []) {
+          if (speakerFilter !== "all" && dec.ownerName !== speakerFilter) {
+            continue;
+          }
+          if (!q || dec.decision.toLowerCase().includes(q) || m.title.toLowerCase().includes(q)) {
             summaryMatches.push({
               meetingId: m.id,
               meetingTitle: m.title,
               templateName: activeSum.templateName,
-              text: item.text,
-              timestampSeconds: item.timestampSeconds,
+              text: `Decision (${dec.ownerName}): ${dec.decision}`,
+              timestampSeconds: dec.timestampSeconds,
             });
           }
         }

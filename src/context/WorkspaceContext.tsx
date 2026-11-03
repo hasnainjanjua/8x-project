@@ -8,9 +8,11 @@ import React, {
   useMemo,
   useState,
 } from "react";
-import { INITIAL_WORKSPACE_STATE } from "@/data/seed-meetings";
+import { INITIAL_WORKSPACE_STATE, SUMMARY_TEMPLATES_META } from "@/data/seed-meetings";
+import { buildCustomTemplateSummary } from "@/lib/custom-template-summary";
 import {
   ActionItem,
+  CustomSummaryTemplate,
   HighlightClip,
   HighlightTag,
   Meeting,
@@ -116,6 +118,12 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         if (parsed && Array.isArray(parsed.meetings) && parsed.meetings.length > 0) {
           setState(parsed);
           loadedLocal = true;
+          fetch("/api/workspace", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ state: parsed }),
+            keepalive: true,
+          }).catch(() => {});
         }
       }
     } catch {
@@ -164,6 +172,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ state: next }),
+        keepalive: true,
       }).catch(() => {});
       return next;
     });
@@ -171,15 +180,34 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
   const switchMeetingTemplate = useCallback(
     (meetingId: string, templateId: SummaryTemplateId) => {
-      persistState((prev) => ({
-        ...prev,
-        meetings: prev.meetings.map((m) =>
-          m.id === meetingId ? { ...m, activeTemplateId: templateId } : m
-        ),
-      }));
-      showToast(`Switched summary view to ${templateId.replace("_", " ").toUpperCase()}`);
+      const builtInMeta = SUMMARY_TEMPLATES_META.find((t) => t.id === templateId);
+      const customTpl = state.customTemplates.find((ct) => ct.id === templateId);
+      const displayName =
+        builtInMeta?.name || customTpl?.name || templateId.replace("_", " ").toUpperCase();
+
+      persistState((prev) => {
+        const matchedCustom = prev.customTemplates.find((ct) => ct.id === templateId);
+        return {
+          ...prev,
+          meetings: prev.meetings.map((m) => {
+            if (m.id !== meetingId) return m;
+            const nextSummaries = matchedCustom
+              ? {
+                  ...m.summariesByTemplate,
+                  [matchedCustom.id]: buildCustomTemplateSummary(m, matchedCustom),
+                }
+              : m.summariesByTemplate;
+            return {
+              ...m,
+              activeTemplateId: templateId,
+              summariesByTemplate: nextSummaries,
+            };
+          }),
+        };
+      });
+      showToast(`Switched summary view to ${displayName}`);
     },
-    [persistState, showToast]
+    [persistState, showToast, state.customTemplates]
   );
 
   const updateTranscriptSegmentText = useCallback(
@@ -217,11 +245,28 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     ): Promise<HighlightClip | null> => {
       const targetMeeting = state.meetings.find((m) => m.id === meetingId);
       const maxDur = targetMeeting ? targetMeeting.durationSeconds : 100;
-      const startSec = Math.max(0, Math.min(maxDur - 1, Math.floor(Number(payload.startTime) || 0)));
-      const endSec = Math.max(
-        startSec + 1,
-        Math.min(maxDur, Math.floor(Number(payload.endTime) || startSec + 15))
-      );
+      const rawStart = Number(payload.startTime);
+      const rawEnd = Number(payload.endTime);
+
+      if (
+        !Number.isFinite(rawStart) ||
+        !Number.isFinite(rawEnd) ||
+        rawStart < 0 ||
+        rawEnd <= rawStart ||
+        rawEnd > maxDur
+      ) {
+        showToast(
+          `Invalid clip range: start (${rawStart}s) and end (${rawEnd}s) must satisfy 0s <= start < end <= ${maxDur}s.`
+        );
+        return null;
+      }
+
+      const startSec = Math.floor(rawStart);
+      const endSec = Math.floor(rawEnd);
+      if (endSec <= startSec) {
+        showToast("Invalid clip range: clip duration must be at least 1 second.");
+        return null;
+      }
 
       // Compute overlapping segments so speakerName and transcriptExcerpt always match [startSec, endSec]
       const overlapping = targetMeeting
@@ -561,14 +606,27 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
   const addCustomTemplate = useCallback(
     (name: string, promptInstructions: string, sections: string[]) => {
+      const newTemplate: CustomSummaryTemplate = {
+        id: `custom-${Date.now()}`,
+        name,
+        promptInstructions,
+        sections:
+          sections.length > 0
+            ? sections
+            : ["Executive Summary", "Competitor Mentions", "Next Steps"],
+      };
       persistState((prev) => ({
         ...prev,
-        customTemplates: [
-          ...prev.customTemplates,
-          { id: `custom-${Date.now()}`, name, promptInstructions, sections },
-        ],
+        customTemplates: [...prev.customTemplates, newTemplate],
+        meetings: prev.meetings.map((m) => ({
+          ...m,
+          summariesByTemplate: {
+            ...m.summariesByTemplate,
+            [newTemplate.id]: buildCustomTemplateSummary(m, newTemplate),
+          },
+        })),
       }));
-      showToast(`Custom template "${name}" saved`);
+      showToast(`Custom template "${name}" saved & available in Meeting Studio`);
     },
     [persistState, showToast]
   );
