@@ -134,10 +134,14 @@ function MeetingStudioInner() {
     meeting.summariesByTemplate.general;
 
   // Determine currently active transcript utterance from currentTime
+  // If currentTime is in a 1-second pause between utterances, hold on the preceding utterance
+  // rather than snapping back to transcript[0].
   const activeSegment =
     meeting.transcript.find(
       (seg) => currentTime >= seg.startTime && currentTime <= seg.endTime
-    ) || meeting.transcript[0];
+    ) ||
+    [...meeting.transcript].reverse().find((seg) => currentTime >= seg.startTime) ||
+    meeting.transcript[0];
 
   const handleTogglePlay = () => {
     const el = audioRef.current;
@@ -228,6 +232,7 @@ function MeetingStudioInner() {
       ) || meeting.transcript[1] || meeting.transcript[0];
 
     let answer = "";
+    let citedSeg = matchedSeg;
     if (lower.includes("budget") || lower.includes("price") || lower.includes("cost") || lower.includes("arr")) {
       answer = `Based on the call with ${meeting.accountName || "the team"}, ${
         matchedSeg.speakerName
@@ -242,6 +247,7 @@ function MeetingStudioInner() {
             s.text.toLowerCase().includes("pain") ||
             s.text.toLowerCase().includes("security")
         ) || matchedSeg;
+      citedSeg = secSeg;
       answer = `${secSeg.speakerName} highlighted the key technical/security criteria at ${formatTimestamp(
         secSeg.startTime
       )}: "${secSeg.text}"`;
@@ -258,7 +264,7 @@ function MeetingStudioInner() {
     setChatHistory((prev) => [
       ...prev,
       { role: "user", text: q },
-      { role: "assistant", text: answer, citedTimestamp: matchedSeg.startTime },
+      { role: "assistant", text: answer, citedTimestamp: citedSeg.startTime },
     ]);
   };
 

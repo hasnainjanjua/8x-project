@@ -1,4 +1,4 @@
-import {
+import type {
   Meeting,
   MeetingSummary,
   Participant,
@@ -51,12 +51,119 @@ export const SUMMARY_TEMPLATES_META: {
   },
 ];
 
+// Canonical, deterministic Speaker-to-Voice Registry keyed strictly by stable speakerId.
+// Voice identity never depends on transcript segment index, turn order, or participant array position.
+export interface SpeakerVoiceProfile {
+  speakerId: string;
+  speakerName: string;
+  ttsVoice: "Microsoft David" | "Microsoft Zira" | "Microsoft Mark";
+  gender: "male" | "female";
+  rate: string;
+  pitch: string;
+}
+
+export const SPEAKER_VOICE_REGISTRY: Readonly<Record<string, SpeakerVoiceProfile>> = {
+  "spk-hasnain": {
+    speakerId: "spk-hasnain",
+    speakerName: "Hasnain Janjua",
+    ttsVoice: "Microsoft David",
+    gender: "male",
+    rate: "+6%",
+    pitch: "0%",
+  },
+  "spk-elena": {
+    speakerId: "spk-elena",
+    speakerName: "Elena Rostova",
+    ttsVoice: "Microsoft Zira",
+    gender: "female",
+    rate: "-5%",
+    pitch: "+2%",
+  },
+  "spk-marcus": {
+    speakerId: "spk-marcus",
+    speakerName: "Marcus Vance",
+    ttsVoice: "Microsoft Mark",
+    gender: "male",
+    rate: "-7%",
+    pitch: "-4%",
+  },
+  "spk-claire": {
+    speakerId: "spk-claire",
+    speakerName: "Claire Moreau",
+    ttsVoice: "Microsoft Zira",
+    gender: "female",
+    rate: "-6%",
+    pitch: "+3%",
+  },
+  "spk-devon": {
+    speakerId: "spk-devon",
+    speakerName: "Devon Brooks",
+    ttsVoice: "Microsoft Mark",
+    gender: "male",
+    rate: "-8%",
+    pitch: "-3%",
+  },
+  "spk-sarah": {
+    speakerId: "spk-sarah",
+    speakerName: "Sarah Jenkins",
+    ttsVoice: "Microsoft Zira",
+    gender: "female",
+    rate: "-5%",
+    pitch: "+1%",
+  },
+  "spk-raj": {
+    speakerId: "spk-raj",
+    speakerName: "Raj Patel",
+    ttsVoice: "Microsoft Mark",
+    gender: "male",
+    rate: "-8%",
+    pitch: "-2%",
+  },
+  "spk-liam": {
+    speakerId: "spk-liam",
+    speakerName: "Liam O'Connor",
+    ttsVoice: "Microsoft Mark",
+    gender: "male",
+    rate: "-7%",
+    pitch: "-4%",
+  },
+  "spk-priya": {
+    speakerId: "spk-priya",
+    speakerName: "Priya Nair",
+    ttsVoice: "Microsoft Zira",
+    gender: "female",
+    rate: "-6%",
+    pitch: "+2%",
+  },
+  "spk-prospect": {
+    speakerId: "spk-prospect",
+    speakerName: "Jordan Taylor",
+    ttsVoice: "Microsoft Mark",
+    gender: "male",
+    rate: "-6%",
+    pitch: "-3%",
+  },
+};
+
 // Deterministic helper that computes each participant's talkTimeSeconds, talkTimePercentage,
 // and questionsAsked directly from the meeting transcript (single source of truth).
 function enrichParticipantsFromTranscript(
   participants: Omit<Participant, "talkTimeSeconds" | "talkTimePercentage" | "questionsAsked">[],
   transcript: TranscriptSegment[]
 ): Participant[] {
+  const participantIdSet = new Set(participants.map((p) => p.id));
+  for (const seg of transcript) {
+    if (!seg.speakerId || !participantIdSet.has(seg.speakerId)) {
+      throw new Error(
+        `Transcript segment "${seg.id}" speakerId "${seg.speakerId}" is missing from meeting participant list.`
+      );
+    }
+    if (!SPEAKER_VOICE_REGISTRY[seg.speakerId]) {
+      throw new Error(
+        `Transcript segment "${seg.id}" speakerId "${seg.speakerId}" has no deterministic TTS voice assignment in SPEAKER_VOICE_REGISTRY.`
+      );
+    }
+  }
   const rawSecondsBySpeaker = new Map<string, number>();
   const questionsBySpeaker = new Map<string, number>();
 
@@ -1340,7 +1447,7 @@ export const INITIAL_MEETINGS: Meeting[] = [
         dueDate: "Fri, Nov 6",
         completed: false,
         priority: "high",
-        timestampSeconds: 116,
+        timestampSeconds: 89,
         syncedTo: ["hubspot", "slack"],
       },
       {

@@ -125,6 +125,13 @@ export function PublicShareClient({
     meeting.summariesByTemplate[meeting.activeTemplateId] ||
     meeting.summariesByTemplate.general;
 
+  const activeSegment =
+    meeting.transcript.find(
+      (seg) => currentTime >= seg.startTime && currentTime <= seg.endTime
+    ) ||
+    [...meeting.transcript].reverse().find((seg) => currentTime >= seg.startTime) ||
+    meeting.transcript[0];
+
   const handleTogglePlay = () => {
     const el = audioRef.current;
     if (!el) return;
@@ -370,7 +377,7 @@ export function PublicShareClient({
               </p>
               <div className="space-y-2.5 max-h-[540px] overflow-y-auto pr-1">
                 {meeting.transcript.map((seg) => {
-                  const active = currentTime >= seg.startTime && currentTime <= seg.endTime;
+                  const active = activeSegment?.id === seg.id;
                   return (
                     <button
                       key={seg.id}
