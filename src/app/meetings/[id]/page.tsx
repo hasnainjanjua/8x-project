@@ -184,9 +184,21 @@ function MeetingStudioInner() {
     setClipCreatorOpen(true);
   };
 
-  const handleSaveClip = () => {
+  const updateClipRangeAndExcerpt = (nextStart: number, nextEnd: number) => {
+    setClipStart(nextStart);
+    setClipEnd(nextEnd);
+    const overlapping = meeting.transcript.filter(
+      (seg) => seg.endTime > nextStart && seg.startTime < nextEnd
+    );
+    if (overlapping.length > 0) {
+      setClipSpeaker(overlapping[0].speakerName);
+      setClipExcerpt(overlapping.map((s) => s.text).join(" "));
+    }
+  };
+
+  const handleSaveClip = async () => {
     if (!clipTitle.trim()) return;
-    createHighlightClip(meeting.id, {
+    const created = await createHighlightClip(meeting.id, {
       title: clipTitle.trim(),
       tag: clipTag,
       startTime: clipStart,
@@ -194,8 +206,10 @@ function MeetingStudioInner() {
       transcriptExcerpt: clipExcerpt,
       speakerName: clipSpeaker,
     });
-    setClipCreatorOpen(false);
-    setActiveTab("highlights");
+    if (created) {
+      setClipCreatorOpen(false);
+      setActiveTab("highlights");
+    }
   };
 
   const handleCopySummaryForSlack = () => {
@@ -1365,8 +1379,10 @@ function MeetingStudioInner() {
                   </label>
                   <input
                     type="number"
+                    min={0}
+                    max={Math.max(0, meeting.durationSeconds - 1)}
                     value={clipStart}
-                    onChange={(e) => setClipStart(Number(e.target.value))}
+                    onChange={(e) => updateClipRangeAndExcerpt(Number(e.target.value), clipEnd)}
                     className="mt-1 w-full rounded-lg border border-[#252B3D] bg-[#0D1017] px-2.5 py-2 font-mono text-xs text-white"
                   />
                 </div>
@@ -1376,8 +1392,10 @@ function MeetingStudioInner() {
                   </label>
                   <input
                     type="number"
+                    min={1}
+                    max={meeting.durationSeconds}
                     value={clipEnd}
-                    onChange={(e) => setClipEnd(Number(e.target.value))}
+                    onChange={(e) => updateClipRangeAndExcerpt(clipStart, Number(e.target.value))}
                     className="mt-1 w-full rounded-lg border border-[#252B3D] bg-[#0D1017] px-2.5 py-2 font-mono text-xs text-white"
                   />
                 </div>

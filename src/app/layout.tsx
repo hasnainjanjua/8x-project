@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { WorkspaceProvider } from "@/context/WorkspaceContext";
-import { AppShell } from "@/components/layout/AppShell";
+import { AppRootShell } from "@/components/layout/AppRootShell";
 
 export const metadata: Metadata = {
   title: "Dashboard — Fathom AI Meeting Intelligence",
@@ -17,9 +16,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className="bg-[#090B10] text-gray-100 antialiased">
-        <WorkspaceProvider>
-          <AppShell>{children}</AppShell>
-        </WorkspaceProvider>
+        <AppRootShell>{children}</AppRootShell>
       </body>
     </html>
   );

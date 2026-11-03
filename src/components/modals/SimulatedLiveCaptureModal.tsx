@@ -176,37 +176,33 @@ export function SimulatedLiveCaptureModal() {
       speakerName: string;
       transcriptExcerpt: string;
     }): Promise<string> => {
-      try {
-        const res = await fetch("/api/share-token", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            meetingId: "mtg-eng-architecture",
-            title: params.title,
-            tag: params.tag,
-            startTime: params.startTime,
-            endTime: params.endTime,
-            speakerName: params.speakerName,
-            transcriptExcerpt: params.transcriptExcerpt,
-            createdBy: "Hasnain Janjua",
-          }),
-        });
-        const data = await res.json();
-        if (data?.ok && typeof data.token === "string") {
-          return data.token;
-        }
-      } catch {
-        // Fallback to local clip id if offline
+      const res = await fetch("/api/share-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          meetingId: "mtg-cloudnova-sim",
+          title: params.title,
+          tag: params.tag,
+          startTime: params.startTime,
+          endTime: params.endTime,
+          speakerName: params.speakerName,
+          transcriptExcerpt: params.transcriptExcerpt,
+          createdBy: "Hasnain Janjua",
+        }),
+      });
+      const data = await res.json();
+      if (data?.ok && typeof data.token === "string") {
+        return data.token;
       }
-      return `${newId}-clip-local`;
+      throw new Error("Failed to sign simulated clip token");
     };
 
     const resolvedHighlights =
       liveHighlights.length > 0
         ? await Promise.all(
             liveHighlights.map(async (lh, idx) => {
-              const startSec = Math.max(0, Math.min(80, lh.timestamp - 5));
-              const endSec = Math.min(105, startSec + 25);
+              const startSec = Math.max(0, Math.min(75, lh.timestamp - 5));
+              const endSec = Math.min(100, startSec + 25);
               const title = `Live Highlight: ${lh.tag}`;
               const shareToken = await signClipServerSide({
                 title,
@@ -240,15 +236,15 @@ export function SimulatedLiveCaptureModal() {
               meetingTitle,
               title: "30-Seat Engineering Trial Commitment",
               tag: "Decision" as HighlightTag,
-              startTime: 50,
-              endTime: 90,
+              startTime: 75,
+              endTime: 100,
               createdBy: "Hasnain Janjua",
               createdAt: new Date().toISOString(),
               shareToken: await signClipServerSide({
                 title: "30-Seat Engineering Trial Commitment",
                 tag: "Decision",
-                startTime: 50,
-                endTime: 90,
+                startTime: 75,
+                endTime: 100,
                 speakerName: "Jordan Taylor",
                 transcriptExcerpt:
                   "That solves our sprint handoff bottleneck. Can we move forward with a 30-seat engineering trial starting Monday and sync action items to Linear?",
@@ -269,7 +265,7 @@ export function SimulatedLiveCaptureModal() {
       status: "completed",
       scope: "my_calls",
       visibility: "public_link",
-      shareToken: `share-sim-${Date.now()}`,
+      shareToken: "share-cloudnova-sim",
       scheduledAt: new Date().toISOString(),
       startedAt: new Date().toISOString(),
       durationSeconds: 100,

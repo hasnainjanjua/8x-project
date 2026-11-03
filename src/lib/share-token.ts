@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { HighlightClip, HighlightTag } from "@/types/fathom";
+import type { HighlightClip, HighlightTag } from "@/types/fathom";
 import { INITIAL_MEETINGS } from "@/data/seed-meetings";
 
 // Server-Only Cryptographic Share Token Module (HMAC-SHA256)
@@ -73,14 +73,42 @@ export interface SignClipTokenInput {
   ttlSeconds?: number;
 }
 
+export function normalizeShareMeetingId(rawMeetingId: string): string {
+  const trimmed = String(rawMeetingId || "").trim();
+  if (trimmed.startsWith("mtg-sim-")) {
+    return "mtg-cloudnova-sim";
+  }
+  return trimmed;
+}
+
+function getKnownMeetingDuration(meetingId: string): { title: string; durationSeconds: number } | null {
+  if (meetingId === "mtg-cloudnova-sim") {
+    return {
+      title: "CloudNova — Enterprise Architecture & 30-Seat Trial Kickoff",
+      durationSeconds: 100,
+    };
+  }
+  const seeded = INITIAL_MEETINGS.find((m) => m.id === meetingId);
+  if (seeded) {
+    return {
+      title: seeded.title,
+      durationSeconds: seeded.durationSeconds,
+    };
+  }
+  return null;
+}
+
 export function signPortableClipToken(input: SignClipTokenInput): string {
-  const meetingId = String(input.meetingId || "").trim();
+  const meetingId = normalizeShareMeetingId(input.meetingId);
   if (!/^[a-zA-Z0-9_-]{3,80}$/.test(meetingId)) {
     throw new Error("Invalid meetingId format");
   }
 
-  const knownMeeting = INITIAL_MEETINGS.find((m) => m.id === meetingId);
-  const maxAllowedDuration = knownMeeting ? knownMeeting.durationSeconds : 3600;
+  const knownMeeting = getKnownMeetingDuration(meetingId);
+  if (!knownMeeting) {
+    throw new Error("Unknown meetingId for portable clip share");
+  }
+  const maxAllowedDuration = knownMeeting.durationSeconds;
 
   const title = String(input.title || "").trim().slice(0, 120);
   const speakerName = String(input.speakerName || "").trim().slice(0, 60);
@@ -212,14 +240,14 @@ export function verifyPortableClipToken(token: string): HighlightClip | null {
       return null;
     }
 
-    const parentMeeting = INITIAL_MEETINGS.find((m) => m.id === data.m);
+    const parentMeeting = getKnownMeetingDuration(data.m);
     if (!parentMeeting || data.e > parentMeeting.durationSeconds) {
       return null;
     }
 
     return {
       id: `clip-portable-${sigHex.slice(0, 12)}`,
-      meetingId: parentMeeting.id,
+      meetingId: data.m,
       meetingTitle: parentMeeting.title,
       title: data.t.trim(),
       tag: data.g as HighlightTag,

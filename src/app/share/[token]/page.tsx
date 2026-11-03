@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
-import { verifyPortableClipToken } from "@/lib/share-token";
-import { INITIAL_MEETINGS } from "@/data/seed-meetings";
+import { resolvePublicShare } from "@/lib/public-share-resolver";
 import { PublicShareClient } from "@/components/share/PublicShareClient";
+
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({
   params,
@@ -9,34 +10,22 @@ export async function generateMetadata({
   params: Promise<{ token: string }>;
 }): Promise<Metadata> {
   const { token } = await params;
+  const resolved = resolvePublicShare(token);
 
-  // Check if token is a server-verified HMAC-SHA256 portable clip token
-  const verifiedClip = verifyPortableClipToken(token);
-  if (verifiedClip) {
+  if (resolved?.kind === "clip") {
     return {
-      title: `Shared Highlight Clip (${verifiedClip.tag}) — Fathom AI`,
+      title: `Shared Highlight Clip (${resolved.tag}) — Fathom AI`,
       description:
         "Listen to this shared meeting highlight clip with synchronized transcript and time-bounded playback on Fathom AI.",
     };
   }
 
-  // Check seeded meetings & clips (avoiding exposure of private transcript/deal specifics in metadata)
-  for (const m of INITIAL_MEETINGS) {
-    if (m.shareToken === token || m.id === token) {
-      return {
-        title: "Shared Meeting Recording — Fathom AI",
-        description:
-          "Review this shared meeting recording with synchronized transcript and structured summary on Fathom AI.",
-      };
-    }
-    const seededClip = m.highlights.find((h) => h.shareToken === token || h.id === token);
-    if (seededClip) {
-      return {
-        title: `Shared Highlight Clip (${seededClip.tag}) — Fathom AI`,
-        description:
-          "Listen to this shared meeting highlight clip with synchronized transcript and time-bounded playback on Fathom AI.",
-      };
-    }
+  if (resolved?.kind === "meeting") {
+    return {
+      title: "Shared Meeting Recording — Fathom AI",
+      description:
+        "Review this shared meeting recording with synchronized transcript and structured summary on Fathom AI.",
+    };
   }
 
   return {
@@ -51,7 +40,7 @@ export default async function PublicSharePage({
   params: Promise<{ token: string }>;
 }) {
   const { token } = await params;
-  const serverVerifiedClip = verifyPortableClipToken(token);
+  const shareData = resolvePublicShare(token);
 
-  return <PublicShareClient token={token} serverVerifiedClip={serverVerifiedClip} />;
+  return <PublicShareClient shareData={shareData} />;
 }

@@ -46,7 +46,7 @@ interface WorkspaceContextValue {
       speakerName: string;
       notes?: string;
     }
-  ) => HighlightClip;
+  ) => Promise<HighlightClip | null>;
   deleteHighlightClip: (meetingId: string, clipId: string) => void;
   // Action Items
   toggleActionItem: (actionItemId: string) => void;
@@ -100,8 +100,14 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     }, 3400);
   }, []);
 
-  // Hydrate from LocalStorage first for instant client state, then sync with Server API
+  // Hydrate from LocalStorage first for instant client state, then sync with Server API.
+  // Never hydrate or fetch full workspace state on public `/share/*` routes.
   useEffect(() => {
+    if (typeof window !== "undefined" && window.location.pathname.startsWith("/share")) {
+      setIsHydrated(true);
+      return;
+    }
+
     let loadedLocal = false;
     try {
       const saved = window.localStorage.getItem(STORAGE_KEY);
@@ -197,7 +203,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   );
 
   const createHighlightClip = useCallback(
-    (
+    async (
       meetingId: string,
       payload: {
         title: string;
@@ -208,95 +214,106 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         speakerName: string;
         notes?: string;
       }
-    ): HighlightClip => {
+    ): Promise<HighlightClip | null> => {
       const targetMeeting = state.meetings.find((m) => m.id === meetingId);
-      const clipId = `clip-${Date.now()}`;
-      const newClip: HighlightClip = {
-        id: clipId,
-        meetingId,
-        meetingTitle: targetMeeting?.title || "Recorded Meeting",
-        title: payload.title,
-        tag: payload.tag,
-        startTime: payload.startTime,
-        endTime: payload.endTime,
-        createdBy: state.user.name,
-        createdAt: new Date().toISOString(),
-        notes: payload.notes,
-        shareToken: clipId,
-        viewCount: 1,
-        transcriptExcerpt: payload.transcriptExcerpt,
-        speakerName: payload.speakerName,
-      };
+      const maxDur = targetMeeting ? targetMeeting.durationSeconds : 100;
+      const startSec = Math.max(0, Math.min(maxDur - 1, Math.floor(Number(payload.startTime) || 0)));
+      const endSec = Math.max(
+        startSec + 1,
+        Math.min(maxDur, Math.floor(Number(payload.endTime) || startSec + 15))
+      );
 
-      persistState((prev) => ({
-        ...prev,
-        meetings: prev.meetings.map((m) =>
-          m.id === meetingId
-            ? {
-                ...m,
-                highlights: [newClip, ...m.highlights],
-                transcript: m.transcript.map((seg) =>
-                  seg.startTime >= payload.startTime && seg.startTime <= payload.endTime
-                    ? { ...seg, highlightId: newClip.id }
-                    : seg
-                ),
-              }
-            : m
-        ),
-        activities: [
-          {
-            id: `actv-${Date.now()}`,
-            type: "clip_shared",
-            title: `Created highlight clip: "${payload.title}"`,
-            description: `${targetMeeting?.title || "Meeting"} • Tagged as ${payload.tag}`,
-            timestamp: "Just now",
-            meetingId,
-            actorName: prev.user.name,
-          },
-          ...prev.activities,
-        ],
-      }));
+      // Compute overlapping segments so speakerName and transcriptExcerpt always match [startSec, endSec]
+      const overlapping = targetMeeting
+        ? targetMeeting.transcript.filter(
+            (seg) => seg.endTime > startSec && seg.startTime < endSec
+          )
+        : [];
+      const resolvedSpeaker =
+        overlapping.length > 0 ? overlapping[0].speakerName : payload.speakerName;
+      const resolvedExcerpt =
+        overlapping.length > 0
+          ? overlapping.map((s) => s.text).join(" ").slice(0, 320)
+          : payload.transcriptExcerpt.slice(0, 320);
 
-      // Request server-signed HMAC-SHA256 portable token so the clip URL works across browsers/devices
       const signTargetMeetingId = meetingId.startsWith("mtg-sim-")
-        ? "mtg-eng-architecture"
+        ? "mtg-cloudnova-sim"
         : meetingId;
-      fetch("/api/share-token", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          meetingId: signTargetMeetingId,
+
+      try {
+        const res = await fetch("/api/share-token", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            meetingId: signTargetMeetingId,
+            title: payload.title,
+            tag: payload.tag,
+            startTime: startSec,
+            endTime: endSec,
+            speakerName: resolvedSpeaker,
+            transcriptExcerpt: resolvedExcerpt,
+            createdBy: state.user.name,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data?.ok || typeof data.token !== "string") {
+          showToast(data?.error || "Unable to generate portable signed share link");
+          return null;
+        }
+
+        const clipId = `clip-${Date.now()}`;
+        const newClip: HighlightClip = {
+          id: clipId,
+          meetingId,
+          meetingTitle: targetMeeting?.title || "Recorded Meeting",
           title: payload.title,
           tag: payload.tag,
-          startTime: payload.startTime,
-          endTime: payload.endTime,
-          speakerName: payload.speakerName,
-          transcriptExcerpt: payload.transcriptExcerpt,
+          startTime: startSec,
+          endTime: endSec,
           createdBy: state.user.name,
-        }),
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          if (data?.ok && typeof data.token === "string") {
-            persistState((prev) => ({
-              ...prev,
-              meetings: prev.meetings.map((m) =>
-                m.id === meetingId
-                  ? {
-                      ...m,
-                      highlights: m.highlights.map((h) =>
-                        h.id === clipId ? { ...h, shareToken: data.token } : h
-                      ),
-                    }
-                  : m
-              ),
-            }));
-          }
-        })
-        .catch(() => {});
+          createdAt: new Date().toISOString(),
+          notes: payload.notes,
+          shareToken: data.token,
+          viewCount: 1,
+          transcriptExcerpt: resolvedExcerpt,
+          speakerName: resolvedSpeaker,
+        };
 
-      showToast(`Highlight clip "${payload.title}" created & ready to share`);
-      return newClip;
+        persistState((prev) => ({
+          ...prev,
+          meetings: prev.meetings.map((m) =>
+            m.id === meetingId
+              ? {
+                  ...m,
+                  highlights: [newClip, ...m.highlights],
+                  transcript: m.transcript.map((seg) =>
+                    seg.endTime > startSec && seg.startTime < endSec
+                      ? { ...seg, highlightId: newClip.id }
+                      : seg
+                  ),
+                }
+              : m
+          ),
+          activities: [
+            {
+              id: `actv-${Date.now()}`,
+              type: "clip_shared",
+              title: `Created highlight clip: "${payload.title}"`,
+              description: `${targetMeeting?.title || "Meeting"} • Tagged as ${payload.tag}`,
+              timestamp: "Just now",
+              meetingId,
+              actorName: prev.user.name,
+            },
+            ...prev.activities,
+          ],
+        }));
+
+        showToast(`Highlight clip "${payload.title}" created & ready to share`);
+        return newClip;
+      } catch {
+        showToast("Unable to sign portable clip link — please check your connection");
+        return null;
+      }
     },
     [persistState, showToast, state.meetings, state.user.name]
   );

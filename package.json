@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "node --import ./scripts/register-ts-paths.mjs scripts/test-public-clip-isolation.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.469.0",
